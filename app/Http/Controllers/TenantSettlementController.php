@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use RuntimeException;
+use Throwable;
 
 class TenantSettlementController extends Controller
 {
@@ -181,13 +182,19 @@ class TenantSettlementController extends Controller
             'body' => 'treść wiadomości',
         ]);
 
-        Mail::to($data['email'])->send(new TenantSettlementMail(
-            $tenantSettlement,
-            $this->pdfFor($tenantSettlement)->output(),
-            $this->pdfFilename($tenantSettlement),
-            $data['body'],
-            $data['subject'],
-        ));
+        try {
+            Mail::to($data['email'])->send(new TenantSettlementMail(
+                $tenantSettlement,
+                $this->pdfFor($tenantSettlement)->output(),
+                $this->pdfFilename($tenantSettlement),
+                $data['body'],
+                $data['subject'],
+            ));
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['email' => 'Nie udało się wysłać: '.$e->getMessage()]);
+        }
 
         return back()->with('status', "Rozliczenie zostało wysłane na adres {$data['email']}.");
     }

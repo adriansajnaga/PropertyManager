@@ -8,6 +8,7 @@ use App\Services\RentPaymentSummary;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 class TenantPaymentController extends Controller
 {
@@ -42,12 +43,18 @@ class TenantPaymentController extends Controller
             'body' => 'treść wiadomości',
         ]);
 
-        Mail::to($data['email'])->send(new RentReminderMail(
-            $tenant,
-            $charges,
-            $data['body'],
-            $data['subject'],
-        ));
+        try {
+            Mail::to($data['email'])->send(new RentReminderMail(
+                $tenant,
+                $charges,
+                $data['body'],
+                $data['subject'],
+            ));
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['email' => 'Nie udało się wysłać: '.$e->getMessage()]);
+        }
 
         return back()->with('status', "Przypomnienie zostało wysłane na adres {$data['email']}.");
     }

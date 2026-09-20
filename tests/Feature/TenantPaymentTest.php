@@ -108,6 +108,20 @@ class TenantPaymentTest extends TestCase
         });
     }
 
+    public function test_a_broken_mail_server_shows_a_message_instead_of_a_crash(): void
+    {
+        $tenant = $this->tenantWithCharges();
+
+        Mail::shouldReceive('to')->once()->andReturnSelf();
+        Mail::shouldReceive('send')->once()->andThrow(new \RuntimeException('Connection could not be established'));
+
+        $this->post(route('tenants.payments.reminder', $tenant), [
+            'email' => 'biuro@najemca.example',
+            'subject' => 'Przypomnienie',
+            'body' => 'Treść',
+        ])->assertRedirect()->assertSessionHasErrors('email');
+    }
+
     public function test_a_tenant_without_arrears_gets_no_reminder(): void
     {
         Mail::fake();
