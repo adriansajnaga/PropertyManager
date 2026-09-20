@@ -16,4 +16,6 @@
 | | | | **Razem** | **{{ \App\Support\Format::money($total) }} zł** |
 
 {{ config('pm.report_issuer') }}
+
+*Wiadomość wygenerowana automatycznie.*
 </x-mail::message>

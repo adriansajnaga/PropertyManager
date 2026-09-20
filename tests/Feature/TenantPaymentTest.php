@@ -103,7 +103,8 @@ class TenantPaymentTest extends TestCase
         Mail::assertSent(RentReminderMail::class, function (RentReminderMail $mail) {
             return $mail->hasTo('biuro@najemca.example')
                 && str_contains($mail->render(), 'styczeń 2026')
-                && str_contains($mail->render(), 'Dzień dobry, prosimy o uregulowanie zaległości.');
+                && str_contains($mail->render(), 'Dzień dobry, prosimy o uregulowanie zaległości.')
+                && str_contains($mail->render(), 'Wiadomość wygenerowana automatycznie');
         });
     }
 
