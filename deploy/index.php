@@ -9,7 +9,7 @@ define('LARAVEL_START', microtime(true));
 | Front controller dla hostingu współdzielonego
 |--------------------------------------------------------------------------
 |
-| Ten plik leży w public_html/PM, a sama aplikacja — poza katalogiem
+| Ten plik leży w public_html/pm, a sama aplikacja — poza katalogiem
 | publicznym. Poniższa ścieżka wskazuje katalog, do którego cPanel klonuje
 | repozytorium. Domyślnie: /home/UŻYTKOWNIK/PropertyManager
 |

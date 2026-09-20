@@ -1,18 +1,18 @@
-# Wdrożenie na ascomm.pl/PM (cPanel, bez terminala i Composera)
+# Wdrożenie na ascomm.pl/pm (cPanel, bez terminala i Composera)
 
-Aplikacja stoi pod adresem `https://ascomm.pl/PM`.
+Aplikacja stoi pod adresem `https://ascomm.pl/pm` (katalog małymi literami!).
 
 Układ katalogów na serwerze:
 
 ```
 /home/UŻYTKOWNIK/
 ├── PropertyManager/        ← repozytorium z GitHuba (kod, vendor, storage, .env)
-└── public_html/PM/         ← to, co widzi przeglądarka (tylko public/ + index.php)
+└── public_html/pm/         ← to, co widzi przeglądarka (tylko public/ + index.php)
 ```
 
 Kod aplikacji i `.env` leżą **poza** `public_html`, więc nie da się ich otworzyć
 z przeglądarki. `.cpanel.yml` przy każdym wdrożeniu kopiuje zawartość `public/`
-do `public_html/PM` i podmienia `index.php` na wersję z `deploy/index.php`.
+do `public_html/pm` i podmienia `index.php` na wersję z `deploy/index.php`.
 
 Ponieważ na hostingu nie ma Composera, katalog `vendor/` jest trzymany
 w repozytorium — po aktualizacji pakietów trzeba go zacommitować razem z kodem.
@@ -52,9 +52,9 @@ odczyty i rozliczenia są od razu na serwerze.
 ## 5. Wdrożenie plików publicznych
 
 W **Git™ Version Control** przy repozytorium: zakładka **Pull or Deploy**
-→ **Deploy HEAD Commit**. cPanel wykona `.cpanel.yml` i utworzy `public_html/PM`.
+→ **Deploy HEAD Commit**. cPanel wykona `.cpanel.yml` i utworzy `public_html/pm`.
 
-Sprawdź, czy działa: `https://ascomm.pl/PM`
+Sprawdź, czy działa: `https://ascomm.pl/pm`
 
 ## 6. Uprawnienia (tylko jeśli pojawi się błąd zapisu)
 
