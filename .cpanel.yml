@@ -1,0 +1,14 @@
+---
+# Wdrożenie na cPanel (Git Version Control → „Deploy HEAD Commit").
+#
+# Repozytorium jest sklonowane POZA public_html — dzięki temu .env, baza kodu
+# i katalog storage nie są dostępne z przeglądarki. Do public_html/PM trafia
+# wyłącznie zawartość katalogu public/ oraz front controller z deploy/index.php.
+deployment:
+  tasks:
+    - export DEPLOYPATH=$HOME/public_html/PM
+    - /bin/mkdir -p $DEPLOYPATH
+    # Stare, zahaszowane pliki CSS/JS nie mogą zostawać po poprzednich wdrożeniach.
+    - /bin/rm -rf $DEPLOYPATH/build
+    - /bin/cp -R public/. $DEPLOYPATH/
+    - /bin/cp deploy/index.php $DEPLOYPATH/index.php

@@ -4,7 +4,6 @@
 /public/storage
 /storage/*.key
 /storage/pail
-/vendor
 .DS_Store
 .env
 .env.backup
@@ -22,9 +21,9 @@ yarn-error.log
 /.vscode
 /.zed
 
-# Skompilowane assety trzymamy w repozytorium — na hostingu cPanel nie ma node/npm,
-# więc wdrożenie ma brać gotowe pliki z gita.
-# (domyślnie Laravel ignoruje /public/build)
+# Hosting nie ma Composera ani node/npm, więc skompilowane assety (/public/build)
+# i biblioteki (/vendor) jadą w repozytorium — wdrożenie bierze gotowe pliki z gita.
+# (domyślnie Laravel ignoruje oba katalogi)
 
 # Lokalne ustawienia narzędzi
 /.claude/settings.local.json
