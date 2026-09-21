@@ -24,6 +24,11 @@ class SmsapiGateway implements SmsGateway
         return filled($this->token);
     }
 
+    public function isTestMode(): bool
+    {
+        return $this->test;
+    }
+
     public function send(string $phone, string $message): void
     {
         if (! $this->isConfigured()) {

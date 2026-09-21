@@ -127,7 +127,7 @@ class TenantPaymentTest extends TestCase
 
     private function smsGatewayReady(array $response = ['count' => 1, 'list' => [['id' => '1', 'status' => 'QUEUE']]]): void
     {
-        config(['services.smsapi.token' => 'test-token', 'services.smsapi.sender' => null]);
+        config(['services.smsapi.token' => 'test-token', 'services.smsapi.sender' => null, 'services.smsapi.test' => false]);
 
         Http::fake(['api.smsapi.pl/*' => Http::response($response)]);
     }
@@ -148,6 +148,23 @@ class TenantPaymentTest extends TestCase
             && $request['to'] === '48600100200'
             && $request['message'] === 'Przypomnienie: brak wpłaty czynszu.'
             && $request['normalize'] === '1');
+    }
+
+    public function test_in_test_mode_the_app_says_plainly_that_nothing_was_sent(): void
+    {
+        $this->smsGatewayReady();
+        config(['services.smsapi.test' => true]);
+        $tenant = $this->tenantWithCharges();
+
+        $this->get(route('tenants.show', $tenant))->assertSee('Tryb testowy bramki SMS');
+
+        $this->post(route('tenants.payments.reminder', $tenant), [
+            'channels' => ['sms'],
+            'phone' => '600100200',
+            'sms_message' => 'Przypomnienie SMS',
+        ])->assertSessionHas('status', fn ($status) => str_contains($status, 'NIE został wysłany'));
+
+        Http::assertSent(fn ($request) => $request['test'] === '1');
     }
 
     public function test_email_and_sms_go_out_together(): void

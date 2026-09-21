@@ -107,6 +107,12 @@
                 </div>
 
                 <div x-show="sms" x-cloak class="space-y-4" x-on:input="if ($event.target.name === 'sms_message') text = $event.target.value">
+                    @if ($smsReady && $smsTestMode)
+                        <flux:callout variant="warning" icon="beaker"
+                            heading="Tryb testowy bramki SMS — wiadomości są sprawdzane, ale nie wysyłane.">
+                            <flux:callout.text>Aby wysyłać naprawdę, ustaw w pliku .env <code>SMSAPI_TEST=false</code>.</flux:callout.text>
+                        </flux:callout>
+                    @endif
                     <div class="max-w-xs">
                         <flux:input name="phone" label="Numer telefonu"
                             :description="$tenant->phone ? 'Numer z karty najemcy.' : 'Najemca nie ma zapisanego numeru — uzupełnij go w edycji.'"

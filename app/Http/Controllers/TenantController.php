@@ -52,6 +52,7 @@ class TenantController extends Controller
             'settlements' => $tenant->settlements()->with('unit')->latest('month')->limit(12)->get(),
             'payments' => $payments->forTenant($tenant, (int) $request->query('year', now()->year)),
             'smsReady' => $sms->isConfigured(),
+            'smsTestMode' => $sms->isTestMode(),
         ]);
     }
 

@@ -89,7 +89,9 @@ class TenantPaymentController extends Controller
 
             try {
                 $sms->send($phone, $data['sms_message']);
-                $sent[] = 'SMS na '.PhoneNumber::format($phone);
+                $sent[] = $sms->isTestMode()
+                    ? 'SMS na '.PhoneNumber::format($phone).' tylko sprawdzony w trybie testowym — NIE został wysłany (SMSAPI_TEST=true w .env)'
+                    : 'SMS na '.PhoneNumber::format($phone);
             } catch (Throwable $e) {
                 report($e);
                 $failed['phone'] = 'SMS nie został wysłany: '.$e->getMessage();
