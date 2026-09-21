@@ -58,27 +58,66 @@
     @include('tenants.payments')
 
     @if ($payments['overdue']->isNotEmpty())
+        @php
+            $defaultChannels = array_values(array_filter(['email', $smsReady && $tenant->phone ? 'sms' : null]));
+            $channels = (array) old('channels', $defaultChannels);
+            $smsText = old('sms_message', \App\Support\RentReminderSms::defaultText($payments['overdue']));
+        @endphp
+
         <flux:card>
             <flux:heading size="lg">Przypomnienie o płatności</flux:heading>
-            <flux:subheading>
-                W wiadomości wypisane zostaną wszystkie zaległe miesiące wraz z kwotą łączną.
-            </flux:subheading>
+            <flux:subheading>Zaznacz kanały — e-mail i SMS wyjdą jednym kliknięciem.</flux:subheading>
 
-            <form method="POST" action="{{ route('tenants.payments.reminder', $tenant) }}" class="mt-3 space-y-4">
+            {{-- Licznik SMS liczy znaki po zamianie polskich liter na łacińskie — tak jak robi to bramka. --}}
+            <form method="POST" action="{{ route('tenants.payments.reminder', $tenant) }}" class="mt-4 space-y-5"
+                x-data="{
+                    email: @js(in_array('email', $channels)),
+                    sms: @js(in_array('sms', $channels)),
+                    text: @js($smsText),
+                    smsInfo(value) {
+                        const plain = value.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/Ł/g, 'L');
+                        const parts = plain.length <= 160 ? 1 : Math.ceil(plain.length / 153);
+                        return plain.length + ' znaków · ' + parts + ' SMS';
+                    },
+                }">
                 @csrf
 
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <flux:input name="email" type="email" label="Adres e-mail" required
-                        :description="$tenant->email ? 'Adres z karty najemcy.' : 'Najemca nie ma zapisanego adresu — uzupełnij go w edycji.'"
-                        :value="old('email', $tenant->email ?? '')" />
-
-                    <flux:input name="subject" label="Temat" required
-                        :value="old('subject', \App\Mail\RentReminderMail::defaultSubject($tenant))" />
+                <div class="flex flex-wrap gap-8">
+                    <x-checkbox name="channels[]" value="email" label="E-mail" x-model="email"
+                        :checked="in_array('email', $channels)" />
+                    <x-checkbox name="channels[]" value="sms" label="SMS" x-model="sms"
+                        :checked="in_array('sms', $channels)"
+                        :disabled="! $smsReady"
+                        :description="$smsReady ? null : 'Bramka SMS nie jest skonfigurowana — brak SMSAPI_TOKEN w pliku .env.'" />
                 </div>
 
-                <flux:textarea name="body" label="Treść wiadomości" rows="6" required
-                    description="Pod treścią automatycznie dopisywana jest tabela zaległości."
-                >{{ old('body', \App\Mail\RentReminderMail::defaultBody($tenant, $payments['overdue'])) }}</flux:textarea>
+                <div x-show="email" class="space-y-4">
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <flux:input name="email" type="email" label="Adres e-mail"
+                            :description="$tenant->email ? 'Adres z karty najemcy.' : 'Najemca nie ma zapisanego adresu — uzupełnij go w edycji.'"
+                            :value="old('email', $tenant->email ?? '')" />
+
+                        <flux:input name="subject" label="Temat"
+                            :value="old('subject', \App\Mail\RentReminderMail::defaultSubject($tenant))" />
+                    </div>
+
+                    <flux:textarea name="body" label="Treść wiadomości" rows="6"
+                        description="Pod treścią automatycznie dopisywana jest tabela zaległości."
+                    >{{ old('body', \App\Mail\RentReminderMail::defaultBody($tenant, $payments['overdue'])) }}</flux:textarea>
+                </div>
+
+                <div x-show="sms" x-cloak class="space-y-4" x-on:input="if ($event.target.name === 'sms_message') text = $event.target.value">
+                    <div class="max-w-xs">
+                        <flux:input name="phone" label="Numer telefonu"
+                            :description="$tenant->phone ? 'Numer z karty najemcy.' : 'Najemca nie ma zapisanego numeru — uzupełnij go w edycji.'"
+                            :value="old('phone', $tenant->phone ?? '')" />
+                    </div>
+
+                    <div>
+                        <flux:textarea name="sms_message" label="Treść SMS" rows="3">{{ $smsText }}</flux:textarea>
+                        <flux:text class="mt-1 text-xs tabular-nums" x-text="smsInfo(text)"></flux:text>
+                    </div>
+                </div>
 
                 <flux:button type="submit" variant="primary" icon="paper-airplane">Wyślij przypomnienie</flux:button>
             </form>

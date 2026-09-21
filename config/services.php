@@ -28,6 +28,17 @@ return [
         'key' => env('RESEND_KEY'),
     ],
 
+    /*
+     * Bramka SMS do przypomnień o płatnościach. Token generujesz w panelu SMSAPI.pl
+     * (Ustawienia API → Tokeny API, uprawnienie „SMS"). Pole nadawcy musi być
+     * najpierw zatwierdzone w SMSAPI — bez niego SMS przyjdzie z nazwy domyślnej.
+     */
+    'smsapi' => [
+        'token' => env('SMSAPI_TOKEN'),
+        'sender' => env('SMSAPI_SENDER'),
+        'test' => (bool) env('SMSAPI_TEST', false),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

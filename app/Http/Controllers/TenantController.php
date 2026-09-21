@@ -6,6 +6,7 @@ use App\Http\Requests\TenantRequest;
 use App\Models\Reading;
 use App\Models\Tenant;
 use App\Services\RentPaymentSummary;
+use App\Services\Sms\SmsGateway;
 use Illuminate\Http\Request;
 
 class TenantController extends Controller
@@ -30,7 +31,7 @@ class TenantController extends Controller
             ->with('status', 'Najemca został dodany.');
     }
 
-    public function show(Request $request, Tenant $tenant, RentPaymentSummary $payments)
+    public function show(Request $request, Tenant $tenant, RentPaymentSummary $payments, SmsGateway $sms)
     {
         $units = $tenant->currentUnits();
         $meters = $units->flatMap(fn ($unit) => $unit->currentMeters());
@@ -50,6 +51,7 @@ class TenantController extends Controller
             'readingsByMeter' => $readings,
             'settlements' => $tenant->settlements()->with('unit')->latest('month')->limit(12)->get(),
             'payments' => $payments->forTenant($tenant, (int) $request->query('year', now()->year)),
+            'smsReady' => $sms->isConfigured(),
         ]);
     }
 
