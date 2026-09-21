@@ -30,8 +30,9 @@ return [
 
     /*
      * Bramka SMS do przypomnień o płatnościach. Token generujesz w panelu SMSAPI.pl
-     * (Ustawienia API → Tokeny API, uprawnienie „SMS"). Pole nadawcy musi być
-     * najpierw zatwierdzone w SMSAPI — bez niego SMS przyjdzie z nazwy domyślnej.
+     * (Ustawienia API → Tokeny API, uprawnienie „SMS"). Pole nadawcy (najwyżej
+     * 11 znaków) musi być najpierw zatwierdzone w SMSAPI — bez niego SMS przyjdzie
+     * z nazwy domyślnej.
      */
     'smsapi' => [
         'token' => env('SMSAPI_TOKEN'),
