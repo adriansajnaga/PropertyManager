@@ -31,7 +31,7 @@ class Reading extends Model
     {
         return [
             'consumption' => 'decimal:4',
-            'reading_date' => 'date',
+            'reading_date' => 'datetime',
             'reading_timestamp' => 'datetime',
             'synced_at' => 'datetime',
         ];
@@ -47,23 +47,29 @@ class Reading extends Model
         return $query->whereNull('meter_id');
     }
 
-    /** Kolektor zna godzinę odczytu; przy wpisie ręcznym bywa nieznana. */
+    /** Godzina jest znana, gdy kolektor ją zapisał; wpis ręczny i odczyt obliczony jej nie mają. */
     public function hasTime(): bool
     {
-        return $this->reading_timestamp !== null;
+        return $this->measuredAt()->format('H:i:s') !== '00:00:00';
     }
 
+    /**
+     * Moment odczytu. Kolektor zapisuje godzinę wprost w `reading_date`,
+     * starsze wiersze mają ją osobno w `reading_timestamp`.
+     */
     public function measuredAt(): CarbonInterface
     {
+        if ($this->reading_date !== null && $this->reading_date->format('H:i:s') !== '00:00:00') {
+            return $this->reading_date;
+        }
+
         return $this->reading_timestamp ?? $this->reading_date;
     }
 
     /** Data z godziną, jeśli jest znana — inaczej sama data. */
     public function measuredAtLabel(): string
     {
-        return $this->hasTime()
-            ? $this->reading_timestamp->format('d.m.Y, H:i')
-            : $this->reading_date->format('d.m.Y');
+        return $this->measuredAt()->format($this->hasTime() ? 'd.m.Y, H:i' : 'd.m.Y');
     }
 
     public function isManual(): bool

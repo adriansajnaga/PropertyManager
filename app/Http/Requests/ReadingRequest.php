@@ -43,7 +43,7 @@ class ReadingRequest extends FormRequest
                     $validator->errors()->add('consumption', sprintf(
                         'Odczyt nie może być mniejszy od poprzedniego: %s z dnia %s.',
                         number_format((float) $previous->consumption, 2, ',', ' '),
-                        $previous->reading_date->format('d.m.Y'),
+                        $previous->measuredAtLabel(),
                     ));
                 }
 
@@ -53,7 +53,7 @@ class ReadingRequest extends FormRequest
                     $validator->errors()->add('consumption', sprintf(
                         'Odczyt nie może być większy od późniejszego odczytu: %s z dnia %s.',
                         number_format((float) $next->consumption, 2, ',', ' '),
-                        $next->reading_date->format('d.m.Y'),
+                        $next->measuredAtLabel(),
                     ));
                 }
             },
