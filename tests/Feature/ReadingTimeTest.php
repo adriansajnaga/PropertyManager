@@ -31,22 +31,30 @@ class ReadingTimeTest extends TestCase
         ]);
     }
 
-    public function test_a_reading_from_the_collector_shows_the_time_it_was_taken(): void
+    public function test_the_server_timestamp_is_only_a_hint_not_the_reading_time(): void
     {
+        // reading_timestamp mówi, kiedy wiersz trafił na serwer — to inna godzina
+        // niż moment odczytu i nie może udawać momentu odczytu.
         DB::table('readings')->insert([
             'meter_id' => $this->meter->id,
             'source_table' => 'kolektor',
             'source_meter_serial' => 'CB00703',
             'consumption' => 1234.5678,
             'reading_date' => '2026-09-22',
-            'reading_timestamp' => '2026-09-22 06:15:00',
+            'reading_timestamp' => '2026-09-22 23:50:00',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        $this->assertSame('22.09.2026, 06:15', Reading::first()->measuredAtLabel());
+        $reading = Reading::first();
 
-        $this->get(route('readings.index'))->assertOk()->assertSee('22.09.2026, 06:15');
+        $this->assertFalse($reading->hasTime());
+        $this->assertSame('22.09.2026', $reading->measuredAtLabel());
+        $this->assertSame('22.09.2026, 23:50', $reading->recordedAtLabel());
+
+        $this->get(route('readings.index'))
+            ->assertOk()
+            ->assertSee('Zapisano na serwerze: 22.09.2026, 23:50');
     }
 
     public function test_the_time_written_straight_into_reading_date_is_shown(): void

@@ -38,7 +38,11 @@
             <flux:table.rows>
                 @forelse ($readings as $reading)
                     <flux:table.row>
-                        <flux:table.cell>{{ $reading->measuredAtLabel() }}</flux:table.cell>
+                        <flux:table.cell>
+                            <span @if ($reading->recordedAtLabel()) title="Zapisano na serwerze: {{ $reading->recordedAtLabel() }}" @endif>
+                                {{ $reading->measuredAtLabel() }}
+                            </span>
+                        </flux:table.cell>
                         <flux:table.cell variant="strong">
                             @if ($reading->meter)
                                 <flux:link :href="route('meters.show', $reading->meter)">{{ $reading->meter->name }}</flux:link>

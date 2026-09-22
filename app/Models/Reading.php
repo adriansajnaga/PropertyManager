@@ -54,16 +54,19 @@ class Reading extends Model
     }
 
     /**
-     * Moment odczytu. Kolektor zapisuje godzinę wprost w `reading_date`,
-     * starsze wiersze mają ją osobno w `reading_timestamp`.
+     * Moment odczytu — wyłącznie z `reading_date`. Kolumna `reading_timestamp`
+     * mówi, kiedy wiersz trafił na serwer, a to bywa zupełnie inna godzina,
+     * więc nie wolno jej podstawiać w miejsce momentu odczytu.
      */
     public function measuredAt(): CarbonInterface
     {
-        if ($this->reading_date !== null && $this->reading_date->format('H:i:s') !== '00:00:00') {
-            return $this->reading_date;
-        }
+        return $this->reading_date;
+    }
 
-        return $this->reading_timestamp ?? $this->reading_date;
+    /** Kiedy odczyt trafił do bazy — do podpowiedzi przy dacie, nie do rozliczeń. */
+    public function recordedAtLabel(): ?string
+    {
+        return $this->reading_timestamp?->format('d.m.Y, H:i');
     }
 
     /** Data z godziną, jeśli jest znana — inaczej sama data. */
