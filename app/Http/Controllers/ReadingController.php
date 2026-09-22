@@ -7,12 +7,17 @@ use App\Http\Requests\ReadingRequest;
 use App\Models\Meter;
 use App\Models\Reading;
 use App\Services\ReadingLookup;
+use App\Services\ReadingSyncService;
 use Illuminate\Http\Request;
 
 class ReadingController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, ReadingSyncService $sync)
     {
+        // Odczyty trafiają do tabeli wprost od kolektora, bez identyfikatora licznika.
+        // Wejście na listę dowiązuje je po numerze seryjnym, nawet gdy harmonogram nie działa.
+        $linked = $sync->orphanedCount() > 0 ? $sync->linkOrphans() : 0;
+
         $type = $request->query('type');
 
         $readings = Reading::query()
@@ -30,6 +35,7 @@ class ReadingController extends Controller
             'activeType' => $type,
             'orphanedOnly' => $request->boolean('orphaned'),
             'orphanedCount' => Reading::orphaned()->count(),
+            'linkedNow' => $linked,
         ]);
     }
 

@@ -9,6 +9,10 @@
 @endsection
 
 @section('content')
+    @if ($linkedNow > 0)
+        <flux:callout variant="success" icon="link"
+            heading="Przypisano odczyty po numerze seryjnym: {{ $linkedNow }}" />
+    @endif
     <div class="flex flex-wrap items-center gap-2">
         <flux:button size="sm" :variant="! $activeType && ! $orphanedOnly ? 'primary' : 'outline'" :href="route('readings.index')">Wszystkie</flux:button>
         @foreach ($types as $type)

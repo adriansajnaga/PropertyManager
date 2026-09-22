@@ -130,69 +130,58 @@ class ReadingSyncService
     }
 
     /**
-     * Podpina nieprzypisane odczyty do liczników po numerze seryjnym — np. gdy
-     * licznik dodano w aplikacji już po tym, jak spłynęły jego odczyty. Rodzaj
-     * licznika wynika z tabeli źródłowej, bo ten sam numer może mieć licznik wody i prądu.
+     * Podpina nieprzypisane odczyty do liczników po numerze seryjnym — kolektor zna
+     * tylko numer licznika, nigdy identyfikatora z bazy aplikacji. Wywołujemy to
+     * po synchronizacji, po zapisie licznika i przy wejściu na listę odczytów,
+     * bo odczyty bywają wpisywane do tabeli wprost, z pominięciem aplikacji.
      */
     public function linkOrphans(?Meter $only = null): int
     {
-        $linked = 0;
+        $orphans = Reading::orphaned()
+            ->whereNotNull('source_meter_serial')
+            ->select('source_table', 'source_meter_serial')
+            ->distinct()
+            ->get();
 
-        foreach (config('pm.sync.tables') as $sourceTable => $type) {
-            if ($only !== null && $only->type->value !== $type) {
-                continue;
-            }
-
-            $meters = Meter::query()
-                ->where('type', $type)
-                ->when($only, fn ($q) => $q->whereKey($only->id))
-                ->whereIn('serial_number', Reading::orphaned()
-                    ->where('source_table', $sourceTable)
-                    ->select('source_meter_serial'))
-                ->get();
-
-            foreach ($meters as $meter) {
-                $linked += Reading::orphaned()
-                    ->where('source_table', $sourceTable)
-                    ->where('source_meter_serial', $meter->serial_number)
-                    ->update(['meter_id' => $meter->id]);
-            }
+        if ($orphans->isEmpty()) {
+            return 0;
         }
 
-        return $linked + $this->linkOrphansWithUnknownSource($only);
-    }
+        $metersBySerial = ($only !== null ? collect([$only]) : Meter::all())
+            ->groupBy(fn (Meter $meter) => self::normalizeSerial($meter->serial_number));
 
-    /**
-     * Odczyty wpisane do bazy bez rozpoznawalnej tabeli źródłowej (np. ręczny import)
-     * nie mówią, jakiego medium dotyczą. Wiążemy je tylko wtedy, gdy numer seryjny
-     * wskazuje dokładnie jeden licznik — przy dwóch takich numerach byłoby to zgadywanie.
-     */
-    private function linkOrphansWithUnknownSource(?Meter $only): int
-    {
-        $knownSources = array_merge(array_keys(config('pm.sync.tables')), [Reading::SOURCE_MANUAL]);
+        $sources = config('pm.sync.tables');
         $linked = 0;
 
-        $serials = Reading::orphaned()
-            ->whereNotIn('source_table', $knownSources)
-            ->whereNotNull('source_meter_serial')
-            ->when($only, fn ($q) => $q->where('source_meter_serial', $only->serial_number))
-            ->distinct()
-            ->pluck('source_meter_serial');
+        foreach ($orphans as $orphan) {
+            $candidates = $metersBySerial->get(self::normalizeSerial($orphan->source_meter_serial), collect());
 
-        foreach ($serials as $serial) {
-            $meters = Meter::query()->where('serial_number', $serial)->get();
+            // Gdy tabela źródłowa mówi, o jakie medium chodzi, zawężamy do niego wybór —
+            // ten sam numer może nosić licznik wody i licznik prądu.
+            if (isset($sources[$orphan->source_table])) {
+                $candidates = $candidates->filter(
+                    fn (Meter $meter) => $meter->type->value === $sources[$orphan->source_table],
+                );
+            }
 
-            if ($meters->count() !== 1) {
+            // Dwa liczniki o tym samym numerze to zgadywanie — zostawiamy odczyt nieprzypisany.
+            if ($candidates->count() !== 1) {
                 continue;
             }
 
             $linked += Reading::orphaned()
-                ->whereNotIn('source_table', $knownSources)
-                ->where('source_meter_serial', $serial)
-                ->update(['meter_id' => $meters->first()->id]);
+                ->where('source_table', $orphan->source_table)
+                ->where('source_meter_serial', $orphan->source_meter_serial)
+                ->update(['meter_id' => $candidates->first()->id]);
         }
 
         return $linked;
+    }
+
+    /** Numery bywają zapisane ze spacją albo małymi literami — to wciąż ten sam licznik. */
+    private static function normalizeSerial(?string $serial): string
+    {
+        return mb_strtoupper(trim((string) $serial));
     }
 
     public function orphanedCount(): int

@@ -18,6 +18,10 @@ class OverviewController extends Controller
     {
         $accrual->run();
 
+        if ($sync->orphanedCount() > 0) {
+            $sync->linkOrphans();
+        }
+
         return view('overview', [
             'propertyCount' => Property::count(),
             'unitCount' => Unit::count(),
