@@ -72,7 +72,7 @@
                                 @endif
                             </flux:table.cell>
                             <flux:table.cell align="end" class="tabular-nums">{{ number_format((float) $reading->consumption, 2, ',', ' ') }}</flux:table.cell>
-                            <flux:table.cell>{{ $reading->reading_date->format('d.m.Y') }}</flux:table.cell>
+                            <flux:table.cell>{{ $reading->measuredAtLabel() }}</flux:table.cell>
                         </flux:table.row>
                     @empty
                         <flux:table.row>

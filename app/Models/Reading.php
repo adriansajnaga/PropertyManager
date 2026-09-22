@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,6 +45,25 @@ class Reading extends Model
     public function scopeOrphaned(Builder $query): Builder
     {
         return $query->whereNull('meter_id');
+    }
+
+    /** Kolektor zna godzinę odczytu; przy wpisie ręcznym bywa nieznana. */
+    public function hasTime(): bool
+    {
+        return $this->reading_timestamp !== null;
+    }
+
+    public function measuredAt(): CarbonInterface
+    {
+        return $this->reading_timestamp ?? $this->reading_date;
+    }
+
+    /** Data z godziną, jeśli jest znana — inaczej sama data. */
+    public function measuredAtLabel(): string
+    {
+        return $this->hasTime()
+            ? $this->reading_timestamp->format('d.m.Y, H:i')
+            : $this->reading_date->format('d.m.Y');
     }
 
     public function isManual(): bool

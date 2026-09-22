@@ -115,8 +115,8 @@ class ReadingLookup
     public function recentForMeters(iterable $meterIds, int $limit = 5): Collection
     {
         $ranked = Reading::query()
-            ->select(['id', 'meter_id', 'consumption', 'reading_date', 'source_table'])
-            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY meter_id ORDER BY reading_date DESC, id DESC) AS position')
+            ->select(['id', 'meter_id', 'consumption', 'reading_date', 'reading_timestamp', 'source_table'])
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY meter_id ORDER BY reading_date DESC, reading_timestamp DESC, id DESC) AS position')
             ->whereIn('meter_id', collect($meterIds)->all());
 
         return Reading::query()

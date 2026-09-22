@@ -51,7 +51,7 @@
                 <flux:table.rows>
                     @forelse ($readings as $reading)
                         <flux:table.row>
-                            <flux:table.cell>{{ $reading->reading_date->format('d.m.Y') }}</flux:table.cell>
+                            <flux:table.cell>{{ $reading->measuredAtLabel() }}</flux:table.cell>
                             <flux:table.cell align="end" class="tabular-nums">
                                 {{ number_format((float) $reading->consumption, 2, ',', ' ') }} {{ $meter->type->unit() }}
                             </flux:table.cell>

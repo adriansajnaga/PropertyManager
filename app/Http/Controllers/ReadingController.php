@@ -25,6 +25,7 @@ class ReadingController extends Controller
             ->when($type, fn ($q) => $q->whereHas('meter', fn ($m) => $m->where('type', $type)))
             ->when($request->boolean('orphaned'), fn ($q) => $q->orphaned())
             ->orderByDesc('reading_date')
+            ->orderByDesc('reading_timestamp')
             ->orderByDesc('id')
             ->paginate(50)
             ->withQueryString();
@@ -80,7 +81,7 @@ class ReadingController extends Controller
             ->map(fn ($readings) => $readings->map(fn (Reading $r) => [
                 'id' => $r->id,
                 'iso' => $r->reading_date->toDateString(),
-                'date' => $r->reading_date->format('d.m.Y'),
+                'date' => $r->measuredAtLabel(),
                 'value' => (float) $r->consumption,
                 'source' => $r->sourceLabel(),
             ])->values());
