@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\ModuleReadingConverter;
 use App\Services\ReadingSyncService;
 use Illuminate\Console\Command;
 
@@ -9,12 +10,17 @@ class LinkReadings extends Command
 {
     protected $signature = 'pm:readings-link';
 
-    protected $description = 'Przypisuje nieprzypisane odczyty do liczników po numerze seryjnym';
+    protected $description = 'Przypisuje odczyty do liczników po numerze seryjnym i przelicza odczyty nakładek';
 
-    public function handle(ReadingSyncService $sync): int
+    public function handle(ReadingSyncService $sync, ModuleReadingConverter $modules): int
     {
         $linked = $sync->linkOrphans();
         $left = $sync->orphanedCount();
+        $converted = $modules->convertAll();
+
+        if ($converted > 0) {
+            $this->info("Przeliczono odczyty nakładek na stan liczników: {$converted}.");
+        }
 
         $this->info($linked === 0
             ? 'Brak odczytów do przypisania.'

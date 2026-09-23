@@ -33,6 +33,9 @@
                                 @if ($meter->is_main)
                                     <flux:badge size="sm" color="purple" class="ms-2">główny</flux:badge>
                                 @endif
+                                @if ($meter->is_module)
+                                    <flux:badge size="sm" color="sky" class="ms-2">nakładka</flux:badge>
+                                @endif
                             </flux:table.cell>
                             <flux:table.cell>
                                 <div class="font-mono text-xs">{{ $meter->serial_number }}</div>

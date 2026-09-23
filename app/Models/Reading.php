@@ -14,6 +14,9 @@ class Reading extends Model
     /** Stan licznika wyliczony na granicę miesiąca, zapisany, by kolejne rozliczenie ruszyło z tego samego punktu. */
     public const SOURCE_CALCULATED = 'calculated';
 
+    /** Stan wodomierza przeliczony z odczytu nakładki radiowej o różnicę wskazań. */
+    public const SOURCE_MODULE = 'module';
+
     protected $fillable = [
         'meter_id',
         'source_table',
@@ -85,11 +88,17 @@ class Reading extends Model
         return $this->source_table === self::SOURCE_CALCULATED;
     }
 
+    public function isFromModule(): bool
+    {
+        return $this->source_table === self::SOURCE_MODULE;
+    }
+
     public function sourceLabel(): string
     {
         return match (true) {
             $this->isManual() => 'ręczny',
             $this->isCalculated() => 'obliczony',
+            $this->isFromModule() => 'z nakładki',
             default => 'automatyczny',
         };
     }

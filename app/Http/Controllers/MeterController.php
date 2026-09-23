@@ -17,7 +17,7 @@ class MeterController extends Controller
 
     public function create()
     {
-        return view('meters.create', ['meter' => new Meter, 'types' => MeterType::cases()]);
+        return view('meters.create', $this->formData(new Meter));
     }
 
     public function store(MeterRequest $request)
@@ -37,12 +37,31 @@ class MeterController extends Controller
             'unit' => $unit,
             'tenant' => $unit?->currentTenant(),
             'readings' => $meter->readings()->latest('reading_date')->limit(30)->get(),
+            'modules' => $meter->modules()->orderBy('name')->get(),
         ]);
     }
 
     public function edit(Meter $meter)
     {
-        return view('meters.edit', ['meter' => $meter, 'types' => MeterType::cases()]);
+        return view('meters.edit', $this->formData($meter));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formData(Meter $meter): array
+    {
+        return [
+            'meter' => $meter,
+            'types' => MeterType::cases(),
+            // Nakładkę można zamontować na dowolnym liczniku mechanicznym poza nią samą.
+            'hostMeters' => Meter::query()
+                ->withoutModules()
+                ->when($meter->exists, fn ($query) => $query->whereKeyNot($meter->id))
+                ->orderBy('type')
+                ->orderBy('name')
+                ->get(),
+        ];
     }
 
     public function update(MeterRequest $request, Meter $meter)

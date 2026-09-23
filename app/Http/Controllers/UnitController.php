@@ -91,7 +91,7 @@ class UnitController extends Controller
             'properties' => Property::orderBy('name')->get(),
             'tenants' => Tenant::orderBy('name')->get(),
             'metersByType' => collect(MeterType::cases())->mapWithKeys(
-                fn (MeterType $type) => [$type->value => Meter::active()->ofType($type)->orderBy('name')->get()],
+                fn (MeterType $type) => [$type->value => Meter::active()->withoutModules()->ofType($type)->orderBy('name')->get()],
             ),
             'currentTenantId' => $unit->exists ? $unit->currentTenant()?->id : null,
             'currentMeterIds' => collect(MeterType::cases())->mapWithKeys(

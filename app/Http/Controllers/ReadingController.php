@@ -6,17 +6,20 @@ use App\Enums\MeterType;
 use App\Http\Requests\ReadingRequest;
 use App\Models\Meter;
 use App\Models\Reading;
+use App\Services\ModuleReadingConverter;
 use App\Services\ReadingLookup;
 use App\Services\ReadingSyncService;
 use Illuminate\Http\Request;
 
 class ReadingController extends Controller
 {
-    public function index(Request $request, ReadingSyncService $sync)
+    public function index(Request $request, ReadingSyncService $sync, ModuleReadingConverter $modules)
     {
         // Odczyty trafiają do tabeli wprost od kolektora, bez identyfikatora licznika.
-        // Wejście na listę dowiązuje je po numerze seryjnym, nawet gdy harmonogram nie działa.
+        // Wejście na listę dowiązuje je po numerze seryjnym, nawet gdy harmonogram nie działa,
+        // a odczyty nakładek przelicza na stan liczników mechanicznych.
         $linked = $sync->orphanedCount() > 0 ? $sync->linkOrphans() : 0;
+        $modules->convertAll();
 
         $type = $request->query('type');
 

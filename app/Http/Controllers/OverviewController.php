@@ -9,18 +9,21 @@ use App\Models\RentCharge;
 use App\Models\Tenant;
 use App\Models\TenantSettlement;
 use App\Models\Unit;
+use App\Services\ModuleReadingConverter;
 use App\Services\ReadingSyncService;
 use App\Services\RentAccrualService;
 
 class OverviewController extends Controller
 {
-    public function __invoke(ReadingSyncService $sync, RentAccrualService $accrual)
+    public function __invoke(ReadingSyncService $sync, RentAccrualService $accrual, ModuleReadingConverter $modules)
     {
         $accrual->run();
 
         if ($sync->orphanedCount() > 0) {
             $sync->linkOrphans();
         }
+
+        $modules->convertAll();
 
         return view('overview', [
             'propertyCount' => Property::count(),

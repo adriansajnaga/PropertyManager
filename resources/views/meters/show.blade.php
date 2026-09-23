@@ -22,6 +22,29 @@
                 </x-detail>
                 <x-detail label="Licznik główny">{{ $meter->is_main ? 'tak' : 'nie' }}</x-detail>
                 <x-detail label="Podlicznik kotłowni">{{ $meter->is_boiler_supply ? 'tak' : 'nie' }}</x-detail>
+                @if ($meter->is_module)
+                    <x-detail label="Nakładka na liczniku">
+                        @if ($meter->moduleFor)
+                            <flux:link :href="route('meters.show', $meter->moduleFor)">{{ $meter->moduleFor->name }}</flux:link>
+                        @else
+                            <flux:badge size="sm" color="amber">brak przypisania</flux:badge>
+                        @endif
+                    </x-detail>
+                    <x-detail label="Różnica wskazań">
+                        {{ \App\Support\Format::reading($meter->module_offset, $meter->type->unit(), true) }}
+                    </x-detail>
+                @elseif ($modules->isNotEmpty())
+                    <x-detail label="Nakładka radiowa">
+                        @foreach ($modules as $module)
+                            <div>
+                                <flux:link :href="route('meters.show', $module)">{{ $module->serial_number }}</flux:link>
+                                <span class="text-xs text-zinc-500 dark:text-zinc-400">
+                                    różnica {{ \App\Support\Format::reading($module->module_offset, $meter->type->unit(), true) }}
+                                </span>
+                            </div>
+                        @endforeach
+                    </x-detail>
+                @endif
                 <x-detail label="Lokal">
                     @if ($unit)
                         <flux:link :href="route('units.show', $unit)">{{ $unit->description }}</flux:link>
