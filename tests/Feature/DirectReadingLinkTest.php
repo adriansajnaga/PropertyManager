@@ -105,6 +105,26 @@ class DirectReadingLinkTest extends TestCase
             ->assertSee('NIEZNANY');
     }
 
+    public function test_the_source_may_name_the_medium_instead_of_a_table(): void
+    {
+        // Kolektor wysyła `medium=water`, więc w source_table ląduje samo medium.
+        $water = Meter::create([
+            'type' => MeterType::Water,
+            'serial_number' => 'CB00703',
+            'name' => 'Lokal 1 — Woda',
+            'is_active' => true,
+            'is_main' => false,
+        ]);
+
+        $electric = $this->insertRaw(['source_table' => 'electric']);
+        $waterReading = $this->insertRaw(['source_table' => 'water']);
+
+        $this->artisan('pm:readings-link')->assertSuccessful();
+
+        $this->assertSame($this->meter->id, Reading::find($electric)->meter_id);
+        $this->assertSame($water->id, Reading::find($waterReading)->meter_id);
+    }
+
     public function test_the_medium_from_the_source_table_still_wins_over_a_repeated_serial_number(): void
     {
         $water = Meter::create([

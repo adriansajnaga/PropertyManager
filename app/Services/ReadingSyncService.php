@@ -150,18 +150,17 @@ class ReadingSyncService
         $metersBySerial = ($only !== null ? collect([$only]) : Meter::all())
             ->groupBy(fn (Meter $meter) => self::normalizeSerial($meter->serial_number));
 
-        $sources = config('pm.sync.tables');
         $linked = 0;
 
         foreach ($orphans as $orphan) {
             $candidates = $metersBySerial->get(self::normalizeSerial($orphan->source_meter_serial), collect());
 
-            // Gdy tabela źródłowa mówi, o jakie medium chodzi, zawężamy do niego wybór —
+            // Gdy źródło mówi, o jakie medium chodzi, zawężamy do niego wybór —
             // ten sam numer może nosić licznik wody i licznik prądu.
-            if (isset($sources[$orphan->source_table])) {
-                $candidates = $candidates->filter(
-                    fn (Meter $meter) => $meter->type->value === $sources[$orphan->source_table],
-                );
+            $medium = self::mediumOf($orphan->source_table);
+
+            if ($medium !== null) {
+                $candidates = $candidates->filter(fn (Meter $meter) => $meter->type->value === $medium);
             }
 
             // Dwa liczniki o tym samym numerze to zgadywanie — zostawiamy odczyt nieprzypisany.
@@ -176,6 +175,20 @@ class ReadingSyncService
         }
 
         return $linked;
+    }
+
+    /**
+     * Medium odczytu wynika ze źródła: kolektor może podać nazwę tabeli
+     * (`modbus_electric_readings`) albo wprost medium (`electric`). Gdy nie mówi nic,
+     * zwracamy null i o liczniku decyduje sam numer seryjny.
+     */
+    private static function mediumOf(?string $source): ?string
+    {
+        $source = trim((string) $source);
+        $media = array_map(fn (MeterType $type) => $type->value, MeterType::cases());
+
+        return config('pm.sync.tables')[$source]
+            ?? (in_array($source, $media, true) ? $source : null);
     }
 
     /** Numery bywają zapisane ze spacją albo małymi literami — to wciąż ten sam licznik. */
