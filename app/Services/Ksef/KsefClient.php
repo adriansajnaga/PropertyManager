@@ -131,6 +131,81 @@ class KsefClient
         return $sessions[0] ?? [];
     }
 
+    /** Otwarcie sesji interaktywnej; zwraca jej numer referencyjny. */
+    public function openOnlineSession(string $encryptedKey, string $initializationVector, ?string $publicKeyId): string
+    {
+        $response = $this->json($this->request($this->accessToken())->post('/sessions/online', [
+            'formCode' => ['systemCode' => 'FA (3)', 'schemaVersion' => '1-0E', 'value' => 'FA'],
+            'encryption' => array_filter([
+                'encryptedSymmetricKey' => $encryptedKey,
+                'initializationVector' => $initializationVector,
+                'publicKeyId' => $publicKeyId,
+            ]),
+        ]));
+
+        if (! isset($response['referenceNumber'])) {
+            throw new KsefException('KSeF nie otworzył sesji wysyłkowej.');
+        }
+
+        return $response['referenceNumber'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return string numer referencyjny faktury w sesji
+     */
+    public function sendInvoice(string $session, array $payload): string
+    {
+        $response = $this->json(
+            $this->request($this->accessToken())->post('/sessions/online/'.$session.'/invoices', $payload),
+        );
+
+        if (! isset($response['referenceNumber'])) {
+            throw new KsefException('KSeF nie przyjął faktury do sesji.');
+        }
+
+        return $response['referenceNumber'];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function invoiceStatus(string $session, string $invoiceReference): array
+    {
+        return $this->json($this->request($this->accessToken())
+            ->get('/sessions/'.$session.'/invoices/'.$invoiceReference));
+    }
+
+    public function closeOnlineSession(string $session): void
+    {
+        $this->json($this->request($this->accessToken())->post('/sessions/online/'.$session.'/close'));
+    }
+
+    /**
+     * Szyfruje dane kluczem publicznym KSeF o wskazanym przeznaczeniu.
+     *
+     * @return array{0: string, 1: string|null} szyfrogram w Base64 oraz identyfikator klucza
+     */
+    public function encryptWithPublicKey(string $data, string $usage): array
+    {
+        $certificate = $this->publicKeyCertificate($usage);
+
+        $x509 = new X509;
+        $x509->loadX509((string) $certificate['certificate']);
+        $publicKey = $x509->getPublicKey();
+
+        if (! $publicKey instanceof RSA) {
+            throw new KsefException('Certyfikat KSeF nie zawiera klucza RSA.');
+        }
+
+        $rsa = $publicKey
+            ->withPadding(RSA::ENCRYPTION_OAEP)
+            ->withHash('sha256')
+            ->withMGFHash('sha256');
+
+        return [base64_encode($rsa->encrypt($data)), $certificate['publicKeyId'] ?? null];
+    }
+
     /**
      * Metadane faktur z KSeF. `subjectType` = Subject1 oznacza dokumenty, w których
      * jesteśmy sprzedawcą, czyli faktury wystawione naszym najemcom.
@@ -184,6 +259,17 @@ class KsefClient
      */
     public function tokenEncryptionKey(): array
     {
+        return $this->publicKeyCertificate('KsefTokenEncryption');
+    }
+
+    /**
+     * Certyfikat klucza publicznego o danym przeznaczeniu: „KsefTokenEncryption"
+     * dla tokena, „SymmetricKeyEncryption" dla klucza szyfrującego faktury.
+     *
+     * @return array{certificate: string, publicKeyId: string}
+     */
+    public function publicKeyCertificate(string $usage): array
+    {
         $certificates = Cache::remember(
             'ksef.public-keys.'.($this->settings->environment ?? KsefEnvironment::Test)->value,
             now()->addDay(),
@@ -191,12 +277,12 @@ class KsefClient
         );
 
         foreach ($certificates as $certificate) {
-            if (in_array('KsefTokenEncryption', (array) ($certificate['usage'] ?? []), true)) {
+            if (in_array($usage, (array) ($certificate['usage'] ?? []), true)) {
                 return $certificate;
             }
         }
 
-        throw new KsefException('KSeF nie udostępnił klucza do szyfrowania tokena.');
+        throw new KsefException('KSeF nie udostępnił klucza o przeznaczeniu '.$usage.'.');
     }
 
     /**
@@ -204,27 +290,7 @@ class KsefClient
      */
     private function encryptToken(string $token, int $timestampMs): array
     {
-        $certificate = $this->tokenEncryptionKey();
-
-        // Czysty PHP zamiast rozszerzenia openssl — hosting współdzielony bywa bez
-        // pliku openssl.cnf, a phpseclib czyta certyfikat i szyfruje bez niego.
-        $x509 = new X509;
-        $x509->loadX509((string) $certificate['certificate']);
-        $publicKey = $x509->getPublicKey();
-
-        if (! $publicKey instanceof RSA) {
-            throw new KsefException('Certyfikat KSeF nie zawiera klucza RSA.');
-        }
-
-        $rsa = $publicKey
-            ->withPadding(RSA::ENCRYPTION_OAEP)
-            ->withHash('sha256')
-            ->withMGFHash('sha256');
-
-        return [
-            base64_encode($rsa->encrypt($token.'|'.$timestampMs)),
-            $certificate['publicKeyId'] ?? null,
-        ];
+        return $this->encryptWithPublicKey($token.'|'.$timestampMs, 'KsefTokenEncryption');
     }
 
     private function awaitAuthentication(string $reference, string $operationToken): void

@@ -58,11 +58,10 @@
                             <flux:table.cell>{{ $charge->tenant?->name ?? '—' }}</flux:table.cell>
                             <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::money($charge->amount) }} zł</flux:table.cell>
                             <flux:table.cell align="end">
-                                <form method="POST" action="{{ route('invoices.store') }}" class="inline">
-                                    @csrf
-                                    <input type="hidden" name="rent_charge_id" value="{{ $charge->id }}">
-                                    <flux:button type="submit" size="sm" icon="document-plus">Wystaw fakturę</flux:button>
-                                </form>
+                                <flux:button size="sm" icon="document-plus"
+                                    :href="route('invoices.create', ['rent_charge_id' => $charge->id])">
+                                    Wystaw fakturę
+                                </flux:button>
                             </flux:table.cell>
                         </flux:table.row>
                     @endforeach

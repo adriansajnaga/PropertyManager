@@ -7,6 +7,7 @@ use App\Models\RentCharge;
 use App\Services\Ksef\KsefClient;
 use App\Services\Ksef\KsefException;
 use App\Services\Ksef\KsefInvoiceImporter;
+use App\Services\Ksef\KsefInvoiceSender;
 use App\Services\RentInvoiceFactory;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -49,25 +50,67 @@ class InvoiceController extends Controller
         ]);
     }
 
-    /** Wystawienie faktury za naliczony czynsz. */
+    /** Formularz wystawienia faktury — wypełniony danymi z naliczenia, ale edytowalny. */
+    public function create(Request $request, RentInvoiceFactory $factory)
+    {
+        $charge = RentCharge::with('tenant', 'unit')->findOrFail($request->integer('rent_charge_id'));
+
+        try {
+            $draft = $factory->draft($charge);
+        } catch (RuntimeException $e) {
+            return redirect()->route('invoices.index')->withErrors(['invoice' => $e->getMessage()]);
+        }
+
+        return view('invoices.create', ['charge' => $charge, 'draft' => $draft]);
+    }
+
     public function store(Request $request, RentInvoiceFactory $factory)
     {
         $data = $request->validate([
-            'rent_charge_id' => ['required', 'exists:rent_charges,id'],
-            'issued_on' => ['nullable', 'date'],
-        ], [], ['rent_charge_id' => 'naliczenie czynszu']);
+            'rent_charge_id' => ['nullable', 'exists:rent_charges,id'],
+            'number' => ['required', 'string', 'max:64', 'unique:invoices,number'],
+            'issued_on' => ['required', 'date'],
+            'sold_on' => ['required', 'date'],
+            'due_on' => ['required', 'date', 'after_or_equal:issued_on'],
+            'line_name' => ['required', 'string', 'max:255'],
+            'unit' => ['required', 'string', 'max:20'],
+            'quantity' => ['required', 'numeric', 'min:0.0001'],
+            'unit_price_net' => ['required', 'numeric', 'min:0'],
+            'vat_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+        ], [], [
+            'number' => 'numer faktury',
+            'issued_on' => 'data wystawienia',
+            'sold_on' => 'data sprzedaży',
+            'due_on' => 'termin płatności',
+            'line_name' => 'nazwa pozycji',
+            'unit_price_net' => 'cena netto',
+            'vat_rate' => 'stawka VAT',
+        ]);
 
         try {
-            $invoice = $factory->fromRentCharge(
-                RentCharge::findOrFail($data['rent_charge_id']),
-                $data['issued_on'] ?? null,
-            );
+            $invoice = $factory->store($data);
         } catch (RuntimeException $e) {
-            return back()->withErrors(['invoice' => $e->getMessage()]);
+            return back()->withInput()->withErrors(['invoice' => $e->getMessage()]);
         }
 
         return redirect()->route('invoices.show', $invoice)
-            ->with('status', "Faktura {$invoice->number} została wystawiona.");
+            ->with('status', "Faktura {$invoice->number} została wystawiona. Możesz ją teraz wysłać do KSeF.");
+    }
+
+    /** Wysyłka faktury do KSeF sesją interaktywną. */
+    public function send(Invoice $invoice, KsefInvoiceSender $sender)
+    {
+        try {
+            $invoice = KsefClient::wrapConnectionErrors(fn () => $sender->send($invoice));
+        } catch (KsefException $e) {
+            return back()->withErrors(['invoice' => $e->getMessage()]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['invoice' => 'Wysyłka do KSeF nie powiodła się: '.$e->getMessage()]);
+        }
+
+        return back()->with('status', "Faktura {$invoice->number} przyjęta przez KSeF — numer {$invoice->ksef_number}.");
     }
 
     /** Pobranie z KSeF faktur wystawionych najemcom — dokumentów sprzed wdrożenia aplikacji. */

@@ -60,8 +60,9 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('maintenance-costs', MaintenanceCostController::class)->except('show');
     Route::resource('utility-bills', UtilityBillController::class);
 
-    Route::resource('invoices', InvoiceController::class)->only(['index', 'show', 'store', 'destroy']);
+    Route::resource('invoices', InvoiceController::class)->only(['index', 'create', 'show', 'store', 'destroy']);
     Route::post('invoices/import', [InvoiceController::class, 'import'])->name('invoices.import');
+    Route::post('invoices/{invoice}/send', [InvoiceController::class, 'send'])->name('invoices.send');
 
     Route::resource('rent-charges', RentChargeController::class)->except('show');
     Route::post('rent-charges/{rentCharge}/paid', [RentChargeController::class, 'togglePaid'])->name('rent-charges.paid');

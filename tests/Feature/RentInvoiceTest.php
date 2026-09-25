@@ -129,8 +129,8 @@ class RentInvoiceTest extends TestCase
         // Zaległe faktury istnieją już w KSeF — aplikacja nie wystawia ich drugi raz.
         $charge = $this->charge(1230, 'Lokal 12', '2026-08-01');
 
-        $this->from(route('invoices.index'))
-            ->post(route('invoices.store'), ['rent_charge_id' => $charge->id])
+        $this->get(route('invoices.create', ['rent_charge_id' => $charge->id]))
+            ->assertRedirect(route('invoices.index'))
             ->assertSessionHasErrors('invoice');
 
         $this->assertSame(0, Invoice::count());
@@ -151,10 +151,11 @@ class RentInvoiceTest extends TestCase
     {
         $charge = $this->charge();
 
-        $this->post(route('invoices.store'), ['rent_charge_id' => $charge->id])->assertRedirect();
+        app(RentInvoiceFactory::class)->fromRentCharge($charge);
 
-        $this->from(route('invoices.index'))
-            ->post(route('invoices.store'), ['rent_charge_id' => $charge->id])
+        // Formularz nie otworzy się drugi raz dla tego samego naliczenia.
+        $this->get(route('invoices.create', ['rent_charge_id' => $charge->id]))
+            ->assertRedirect(route('invoices.index'))
             ->assertSessionHasErrors('invoice');
 
         $this->assertSame(1, Invoice::count());
@@ -164,8 +165,8 @@ class RentInvoiceTest extends TestCase
     {
         InvoiceSetting::query()->delete();
 
-        $this->from(route('invoices.index'))
-            ->post(route('invoices.store'), ['rent_charge_id' => $this->charge()->id])
+        $this->get(route('invoices.create', ['rent_charge_id' => $this->charge()->id]))
+            ->assertRedirect(route('invoices.index'))
             ->assertSessionHasErrors('invoice');
 
         $this->assertSame(0, Invoice::count());

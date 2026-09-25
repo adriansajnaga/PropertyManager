@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\InvoiceSetting;
 use App\Models\RentCharge;
+use App\Services\Ksef\InvoiceNumbering;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -18,10 +19,108 @@ use RuntimeException;
  */
 class RentInvoiceFactory
 {
-    public function fromRentCharge(RentCharge $charge, ?CarbonInterface $issuedOn = null): Invoice
+    public function __construct(private readonly InvoiceNumbering $numbering) {}
+
+    /**
+     * Wartości do wypełnienia formularza. Nic jeszcze nie zapisujemy — numer i kwoty
+     * użytkownik może poprawić przed wystawieniem.
+     *
+     * @return array<string, mixed>
+     */
+    public function draft(RentCharge $charge, ?CarbonInterface $issuedOn = null): array
     {
         $settings = InvoiceSetting::current();
 
+        $this->guard($charge, $settings);
+
+        $issuedOn = CarbonImmutable::parse($issuedOn ?? now())->startOfDay();
+
+        if (! $issuedOn->isSameMonth(now())) {
+            throw new RuntimeException('Datę wystawienia można ustawić tylko w bieżącym miesiącu.');
+        }
+
+        [$net, $vat, $gross] = $this->amounts((float) $charge->amount, (float) $settings->vat_rate, $settings->rent_is_gross);
+        $numbering = $this->numbering->next($issuedOn);
+
+        return [
+            'rent_charge_id' => $charge->id,
+            'tenant_id' => $charge->tenant_id,
+            'unit_id' => $charge->unit_id,
+            'number' => $numbering['number'],
+            'number_warning' => $numbering['warning'],
+            'issued_on' => $issuedOn->toDateString(),
+            'sold_on' => $issuedOn->toDateString(),
+            'due_on' => $issuedOn->addDays($settings->payment_days)->toDateString(),
+            'vat_rate' => (float) $settings->vat_rate,
+            'line_name' => $settings->rentLineDescription($charge->month),
+            'unit_price_net' => $net,
+            'total_net' => $net,
+            'total_vat' => $vat,
+            'total_gross' => $gross,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public function store(array $data): Invoice
+    {
+        $charge = isset($data['rent_charge_id']) ? RentCharge::find($data['rent_charge_id']) : null;
+
+        if ($charge !== null) {
+            $this->guard($charge, InvoiceSetting::current());
+        }
+
+        $net = round((float) $data['unit_price_net'] * (float) ($data['quantity'] ?? 1), 2);
+        $vatRate = (float) $data['vat_rate'];
+        $vat = round($net * $vatRate / 100, 2);
+
+        return DB::transaction(function () use ($data, $charge, $net, $vat, $vatRate) {
+            $invoice = Invoice::create([
+                'number' => $data['number'],
+                'tenant_id' => $data['tenant_id'] ?? $charge?->tenant_id,
+                'unit_id' => $data['unit_id'] ?? $charge?->unit_id,
+                'rent_charge_id' => $charge?->id,
+                'issued_on' => $data['issued_on'],
+                'sold_on' => $data['sold_on'],
+                'due_on' => $data['due_on'],
+                'vat_rate' => $vatRate,
+                'total_net' => $net,
+                'total_vat' => $vat,
+                'total_gross' => round($net + $vat, 2),
+                'status' => InvoiceStatus::Draft,
+            ]);
+
+            $invoice->lines()->create([
+                'position' => 1,
+                'name' => $data['line_name'],
+                'unit' => $data['unit'] ?? 'szt.',
+                'quantity' => (float) ($data['quantity'] ?? 1),
+                'unit_price_net' => (float) $data['unit_price_net'],
+                'vat_rate' => $vatRate,
+                'net' => $net,
+                'vat' => $vat,
+                'gross' => round($net + $vat, 2),
+            ]);
+
+            // Naliczenie czynszu przejmuje numer i termin z faktury — dzięki temu
+            // lista czynszów od razu pokazuje, czym został udokumentowany.
+            $charge?->update([
+                'invoice_number' => $invoice->number,
+                'due_on' => $invoice->due_on,
+            ]);
+
+            return $invoice->load('lines', 'tenant', 'unit');
+        });
+    }
+
+    public function fromRentCharge(RentCharge $charge, ?CarbonInterface $issuedOn = null): Invoice
+    {
+        return $this->store($this->draft($charge, $issuedOn));
+    }
+
+    private function guard(RentCharge $charge, InvoiceSetting $settings): void
+    {
         if (! $settings->isConfigured()) {
             throw new RuntimeException('Uzupełnij dane sprzedawcy w ustawieniach faktur.');
         }
@@ -42,52 +141,6 @@ class RentInvoiceFactory
                 $charge->month->isoFormat('MMMM YYYY'),
             ));
         }
-
-        $issuedOn = CarbonImmutable::parse($issuedOn ?? now())->startOfDay();
-
-        if (! $issuedOn->isSameMonth(now())) {
-            throw new RuntimeException('Datę wystawienia można ustawić tylko w bieżącym miesiącu.');
-        }
-
-        [$net, $vat, $gross] = $this->amounts((float) $charge->amount, (float) $settings->vat_rate, $settings->rent_is_gross);
-
-        return DB::transaction(function () use ($charge, $settings, $issuedOn, $net, $vat, $gross) {
-            $invoice = Invoice::create([
-                'number' => $this->nextNumber($issuedOn),
-                'tenant_id' => $charge->tenant_id,
-                'unit_id' => $charge->unit_id,
-                'rent_charge_id' => $charge->id,
-                'issued_on' => $issuedOn->toDateString(),
-                'sold_on' => $issuedOn->toDateString(),
-                'due_on' => $issuedOn->addDays($settings->payment_days)->toDateString(),
-                'vat_rate' => $settings->vat_rate,
-                'total_net' => $net,
-                'total_vat' => $vat,
-                'total_gross' => $gross,
-                'status' => InvoiceStatus::Draft,
-            ]);
-
-            $invoice->lines()->create([
-                'position' => 1,
-                'name' => $settings->rentLineDescription($charge->month),
-                'unit' => 'szt.',
-                'quantity' => 1,
-                'unit_price_net' => $net,
-                'vat_rate' => $settings->vat_rate,
-                'net' => $net,
-                'vat' => $vat,
-                'gross' => $gross,
-            ]);
-
-            // Naliczenie czynszu przejmuje numer i termin z faktury — dzięki temu
-            // lista czynszów od razu pokazuje, czym został udokumentowany.
-            $charge->update([
-                'invoice_number' => $invoice->number,
-                'due_on' => $invoice->due_on,
-            ]);
-
-            return $invoice->load('lines', 'tenant', 'unit');
-        });
     }
 
     /**
@@ -104,24 +157,5 @@ class RentInvoiceFactory
         $vat = round($amount * $vatRate / 100, 2);
 
         return [round($amount, 2), $vat, round($amount + $vat, 2)];
-    }
-
-    /**
-     * Numer w formacie „3/9/2026" — kolejny w miesiącu, miesiąc bez zera wiodącego.
-     * Numery zajęte poza aplikacją (np. wystawione wcześniej w KSeF) są pomijane.
-     */
-    private function nextNumber(CarbonInterface $issuedOn): string
-    {
-        $position = Invoice::query()
-            ->whereYear('issued_on', $issuedOn->year)
-            ->whereMonth('issued_on', $issuedOn->month)
-            ->count() + 1;
-
-        do {
-            $number = $position.'/'.$issuedOn->month.'/'.$issuedOn->year;
-            $position++;
-        } while (Invoice::where('number', $number)->exists());
-
-        return $number;
     }
 }

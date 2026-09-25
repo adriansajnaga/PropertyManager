@@ -6,6 +6,13 @@
 
 @section('actions')
     @unless ($invoice->isInKsef())
+        <form method="POST" action="{{ route('invoices.send', $invoice) }}" class="inline">
+            @csrf
+            <flux:button type="submit" variant="primary" icon="paper-airplane">Wyślij do KSeF</flux:button>
+        </form>
+    @endunless
+
+    @unless ($invoice->isInKsef())
         <x-delete-button :action="route('invoices.destroy', $invoice)" label="Usuń fakturę"
             confirm="Usunąć fakturę {{ $invoice->number }}? Numer zostanie zwolniony." />
     @endunless
