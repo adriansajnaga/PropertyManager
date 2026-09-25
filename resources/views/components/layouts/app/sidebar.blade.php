@@ -41,6 +41,9 @@
                         <flux:navlist.item icon="envelope" :href="route('mail-settings.edit')" :current="request()->routeIs('mail-settings.*')">
                             Ustawienia poczty
                         </flux:navlist.item>
+                        <flux:navlist.item icon="document-check" :href="route('ksef-settings.edit')" :current="request()->routeIs('ksef-settings.*')">
+                            KSeF
+                        </flux:navlist.item>
                     </flux:navlist.group>
                 @endif
             </flux:navlist>

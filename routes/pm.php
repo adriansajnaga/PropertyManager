@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HeatSettlementController;
+use App\Http\Controllers\KsefSettingController;
 use App\Http\Controllers\MailSettingController;
 use App\Http\Controllers\MaintenanceCostController;
 use App\Http\Controllers\MeterController;
@@ -24,6 +25,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('mail-settings', [MailSettingController::class, 'edit'])->name('mail-settings.edit');
         Route::put('mail-settings', [MailSettingController::class, 'update'])->name('mail-settings.update');
         Route::post('mail-settings/test', [MailSettingController::class, 'test'])->name('mail-settings.test');
+
+        Route::get('ksef-settings', [KsefSettingController::class, 'edit'])->name('ksef-settings.edit');
+        Route::put('ksef-settings', [KsefSettingController::class, 'update'])->name('ksef-settings.update');
+        Route::post('ksef-settings/test', [KsefSettingController::class, 'test'])->name('ksef-settings.test');
     });
 
     Route::middleware('admin')->prefix('users')->name('users.')->group(function () {

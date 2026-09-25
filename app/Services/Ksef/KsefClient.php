@@ -1,0 +1,220 @@
+<?php
+
+namespace App\Services\Ksef;
+
+use App\Models\KsefSetting;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use phpseclib3\Crypt\RSA;
+use phpseclib3\File\X509;
+
+/**
+ * Klient API KSeF 2.0 — na razie w zakresie uwierzytelniania tokenem KSeF.
+ *
+ * Przebieg wynika z dokumentacji Ministerstwa Finansów (CIRFMF/ksef-api):
+ *   1. POST /auth/challenge                → challenge + timestampMs
+ *   2. szyfrowanie „token|timestampMs"     → RSA-OAEP SHA-256 kluczem publicznym KSeF
+ *   3. POST /auth/ksef-token               → numer referencyjny + token operacyjny
+ *   4. GET  /auth/{referenceNumber}        → status operacji (kod 200 = sukces)
+ *   5. POST /auth/token/redeem             → accessToken używany w kolejnych wywołaniach
+ */
+class KsefClient
+{
+    /** Ile razy pytamy o wynik uwierzytelnienia, zanim uznamy je za nieudane. */
+    private const STATUS_ATTEMPTS = 10;
+
+    private const STATUS_DELAY_MS = 700;
+
+    public function __construct(private readonly KsefSetting $settings) {}
+
+    public static function forCurrentSettings(): self
+    {
+        return new self(KsefSetting::current());
+    }
+
+    /**
+     * Token dostępowy do wywołań API. Trzymany w cache do czasu wygaśnięcia,
+     * bo każde uwierzytelnienie to cztery wywołania i operacja kryptograficzna.
+     */
+    public function accessToken(): string
+    {
+        $key = 'ksef.access-token.'.$this->settings->environment->value.'.'.$this->settings->nip;
+
+        if ($cached = Cache::get($key)) {
+            return $cached;
+        }
+
+        $token = $this->authenticate();
+
+        $validUntil = isset($token['validUntil']) ? strtotime((string) $token['validUntil']) : false;
+        $seconds = $validUntil ? max(60, $validUntil - time() - 60) : 600;
+
+        Cache::put($key, $token['token'], $seconds);
+
+        return $token['token'];
+    }
+
+    /**
+     * Pełny przebieg uwierzytelnienia tokenem KSeF.
+     *
+     * @return array{token: string, validUntil?: string}
+     */
+    public function authenticate(): array
+    {
+        if (! $this->settings->isConfigured()) {
+            throw new KsefException('Uzupełnij NIP i token KSeF w ustawieniach.');
+        }
+
+        $challenge = $this->json($this->request()->post('/auth/challenge'));
+
+        [$encryptedToken, $publicKeyId] = $this->encryptToken(
+            (string) $this->settings->token,
+            (int) ($challenge['timestampMs'] ?? 0),
+        );
+
+        $init = $this->json($this->request()->post('/auth/ksef-token', array_filter([
+            'challenge' => $challenge['challenge'] ?? null,
+            'contextIdentifier' => ['type' => 'Nip', 'value' => $this->settings->nip],
+            'encryptedToken' => $encryptedToken,
+            'publicKeyId' => $publicKeyId,
+        ])));
+
+        $operationToken = $init['authenticationToken']['token'] ?? null;
+        $reference = $init['referenceNumber'] ?? null;
+
+        if (! $operationToken || ! $reference) {
+            throw new KsefException('KSeF nie zwrócił tokena operacyjnego.');
+        }
+
+        $this->awaitAuthentication($reference, $operationToken);
+
+        $tokens = $this->json($this->request($operationToken)->post('/auth/token/redeem'));
+
+        if (! isset($tokens['accessToken']['token'])) {
+            throw new KsefException('KSeF nie zwrócił tokena dostępowego.');
+        }
+
+        return $tokens['accessToken'];
+    }
+
+    /** Dane bieżącej sesji — używane do sprawdzenia, czy konfiguracja działa. */
+    public function currentSession(): array
+    {
+        return $this->json($this->request($this->accessToken())->get('/auth/sessions/current'));
+    }
+
+    /**
+     * Certyfikat klucza publicznego do szyfrowania tokena. Klucze bywają rotowane,
+     * więc trzymamy je w cache tylko na dobę.
+     *
+     * @return array{certificate: string, publicKeyId: string}
+     */
+    public function tokenEncryptionKey(): array
+    {
+        $certificates = Cache::remember(
+            'ksef.public-keys.'.$this->settings->environment->value,
+            now()->addDay(),
+            fn () => $this->json($this->request()->get('/security/public-key-certificates')),
+        );
+
+        foreach ($certificates as $certificate) {
+            if (in_array('KsefTokenEncryption', (array) ($certificate['usage'] ?? []), true)) {
+                return $certificate;
+            }
+        }
+
+        throw new KsefException('KSeF nie udostępnił klucza do szyfrowania tokena.');
+    }
+
+    /**
+     * @return array{0: string, 1: string|null} szyfrogram w Base64 oraz identyfikator użytego klucza
+     */
+    private function encryptToken(string $token, int $timestampMs): array
+    {
+        $certificate = $this->tokenEncryptionKey();
+
+        // Czysty PHP zamiast rozszerzenia openssl — hosting współdzielony bywa bez
+        // pliku openssl.cnf, a phpseclib czyta certyfikat i szyfruje bez niego.
+        $x509 = new X509;
+        $x509->loadX509((string) $certificate['certificate']);
+        $publicKey = $x509->getPublicKey();
+
+        if (! $publicKey instanceof RSA) {
+            throw new KsefException('Certyfikat KSeF nie zawiera klucza RSA.');
+        }
+
+        $rsa = $publicKey
+            ->withPadding(RSA::ENCRYPTION_OAEP)
+            ->withHash('sha256')
+            ->withMGFHash('sha256');
+
+        return [
+            base64_encode($rsa->encrypt($token.'|'.$timestampMs)),
+            $certificate['publicKeyId'] ?? null,
+        ];
+    }
+
+    private function awaitAuthentication(string $reference, string $operationToken): void
+    {
+        for ($attempt = 1; $attempt <= self::STATUS_ATTEMPTS; $attempt++) {
+            $status = $this->json($this->request($operationToken)->get('/auth/'.$reference));
+            $code = (int) ($status['status']['code'] ?? 0);
+
+            if ($code === 200) {
+                return;
+            }
+
+            if ($code >= 400) {
+                throw new KsefException(
+                    'Uwierzytelnienie odrzucone przez KSeF: '.($status['status']['description'] ?? 'kod '.$code),
+                );
+            }
+
+            usleep(self::STATUS_DELAY_MS * 1000);
+        }
+
+        throw new KsefException('KSeF nie potwierdził uwierzytelnienia w wyznaczonym czasie.');
+    }
+
+    private function request(?string $bearer = null): PendingRequest
+    {
+        $request = Http::baseUrl($this->settings->baseUrl())
+            ->acceptJson()
+            ->timeout(30);
+
+        return $bearer ? $request->withToken($bearer) : $request;
+    }
+
+    /**
+     * Odpowiedzi błędów KSeF niosą opis w polu `exception`, więc wyciągamy go
+     * zamiast pokazywać użytkownikowi surowy kod HTTP.
+     */
+    private function json(Response $response): array
+    {
+        if ($response->failed()) {
+            $body = $response->json() ?? [];
+
+            $message = $body['exception']['exceptionDetailList'][0]['exceptionDescription']
+                ?? $body['exception']['exceptionDescription']
+                ?? $body['message']
+                ?? 'HTTP '.$response->status();
+
+            throw new KsefException('KSeF odrzucił żądanie: '.$message, $response->status());
+        }
+
+        return (array) $response->json();
+    }
+
+    /** @throws KsefException */
+    public static function wrapConnectionErrors(callable $callback): mixed
+    {
+        try {
+            return $callback();
+        } catch (ConnectionException $e) {
+            throw new KsefException('Brak połączenia z KSeF: '.$e->getMessage());
+        }
+    }
+}
