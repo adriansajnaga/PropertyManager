@@ -42,9 +42,9 @@ class RentInvoiceTest extends TestCase
         ]);
     }
 
-    private function charge(float $amount = 2214, string $month = '2026-09-01'): RentCharge
+    private function charge(float $amount = 2214, string $unitName = 'Lokal 12', string $month = '2026-09-01'): RentCharge
     {
-        $unit = Unit::where('description', 'Lokal 12')->firstOrFail();
+        $unit = Unit::where('description', $unitName)->firstOrFail();
 
         return RentCharge::create([
             'unit_id' => $unit->id,
@@ -85,7 +85,7 @@ class RentInvoiceTest extends TestCase
         $factory = app(RentInvoiceFactory::class);
 
         $first = $factory->fromRentCharge($this->charge(1230));
-        $second = $factory->fromRentCharge($this->charge(1845, '2026-08-01'));
+        $second = $factory->fromRentCharge($this->charge(1845, 'Lokal 14'));
 
         $this->assertSame('1/9/2026', $first->number);
         $this->assertSame('2/9/2026', $second->number);
@@ -122,6 +122,29 @@ class RentInvoiceTest extends TestCase
         $this->assertSame($invoice->number, $charge->invoice_number);
         $this->assertSame('2026-09-08', $charge->due_on->toDateString());
         $this->assertSame(\App\Enums\RentStatus::Issued, $charge->status);
+    }
+
+    public function test_an_invoice_for_an_earlier_month_is_refused(): void
+    {
+        // Zaległe faktury istnieją już w KSeF — aplikacja nie wystawia ich drugi raz.
+        $charge = $this->charge(1230, 'Lokal 12', '2026-08-01');
+
+        $this->from(route('invoices.index'))
+            ->post(route('invoices.store'), ['rent_charge_id' => $charge->id])
+            ->assertSessionHasErrors('invoice');
+
+        $this->assertSame(0, Invoice::count());
+    }
+
+    public function test_the_list_only_offers_charges_from_the_current_month(): void
+    {
+        $this->charge(1230, 'Lokal 12', '2026-08-01');
+        $this->charge(1845, 'Lokal 14');
+
+        $html = $this->get(route('invoices.index'))->assertOk()->getContent();
+
+        $this->assertStringContainsString('Lokal 14', $html);
+        $this->assertStringNotContainsString('sierpień 2026', $html);
     }
 
     public function test_one_charge_cannot_be_invoiced_twice(): void
@@ -172,7 +195,7 @@ class RentInvoiceTest extends TestCase
         $this->delete(route('invoices.destroy', $invoice))->assertRedirect();
         $this->assertSame(0, Invoice::count());
 
-        $second = app(RentInvoiceFactory::class)->fromRentCharge($this->charge(1230, '2026-10-01'));
+        $second = app(RentInvoiceFactory::class)->fromRentCharge($this->charge(1230, 'Lokal 14'));
         $second->update(['ksef_number' => '8792451081-20260901-9132F5C00005-ED', 'status' => InvoiceStatus::Sent]);
 
         $this->from(route('invoices.show', $second))

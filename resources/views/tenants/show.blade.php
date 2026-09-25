@@ -131,6 +131,48 @@
     @endif
 
     <flux:card>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <flux:heading size="lg">Faktury</flux:heading>
+            <flux:button size="sm" variant="ghost" icon="arrow-right" :href="route('invoices.index')">Wszystkie faktury</flux:button>
+        </div>
+
+        <flux:table class="mt-2">
+            <flux:table.columns>
+                <flux:table.column>Numer</flux:table.column>
+                <flux:table.column>Wystawiono</flux:table.column>
+                <flux:table.column>Termin</flux:table.column>
+                <flux:table.column align="end">Netto</flux:table.column>
+                <flux:table.column align="end">Brutto</flux:table.column>
+                <flux:table.column>KSeF</flux:table.column>
+            </flux:table.columns>
+            <flux:table.rows>
+                @forelse ($invoices as $invoice)
+                    <flux:table.row>
+                        <flux:table.cell variant="strong">
+                            <flux:link :href="route('invoices.show', $invoice)">{{ $invoice->number }}</flux:link>
+                        </flux:table.cell>
+                        <flux:table.cell>{{ $invoice->issued_on->format('d.m.Y') }}</flux:table.cell>
+                        <flux:table.cell>{{ $invoice->due_on->format('d.m.Y') }}</flux:table.cell>
+                        <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::money($invoice->total_net) }} zł</flux:table.cell>
+                        <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::money($invoice->total_gross) }} zł</flux:table.cell>
+                        <flux:table.cell>
+                            @if ($invoice->isInKsef())
+                                <span class="font-mono text-xs">{{ $invoice->ksef_number }}</span>
+                            @else
+                                <flux:badge size="sm" :color="$invoice->status->color()">{{ $invoice->status->label() }}</flux:badge>
+                            @endif
+                        </flux:table.cell>
+                    </flux:table.row>
+                @empty
+                    <flux:table.row>
+                        <flux:table.cell colspan="6">Brak faktur.</flux:table.cell>
+                    </flux:table.row>
+                @endforelse
+            </flux:table.rows>
+        </flux:table>
+    </flux:card>
+
+    <flux:card>
         <flux:heading size="lg">Miesięczne rozliczenia</flux:heading>
         <flux:table class="mt-2">
             <flux:table.columns>

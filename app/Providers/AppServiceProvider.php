@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\MailSetting;
+use App\Services\Ksef\KsefClient;
 use App\Services\Sms\SmsapiGateway;
 use App\Services\Sms\SmsGateway;
 use Illuminate\Support\ServiceProvider;
@@ -15,6 +16,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Bez tego kontener wstrzyknąłby pusty rekord ustawień zamiast zapisanych.
+        $this->app->bind(KsefClient::class, fn () => KsefClient::forCurrentSettings());
+
         $this->app->bind(SmsGateway::class, fn () => new SmsapiGateway(
             config('services.smsapi.token'),
             config('services.smsapi.sender'),

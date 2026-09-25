@@ -61,6 +61,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('utility-bills', UtilityBillController::class);
 
     Route::resource('invoices', InvoiceController::class)->only(['index', 'show', 'store', 'destroy']);
+    Route::post('invoices/import', [InvoiceController::class, 'import'])->name('invoices.import');
 
     Route::resource('rent-charges', RentChargeController::class)->except('show');
     Route::post('rent-charges/{rentCharge}/paid', [RentChargeController::class, 'togglePaid'])->name('rent-charges.paid');

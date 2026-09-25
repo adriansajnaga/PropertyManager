@@ -2,7 +2,9 @@
 
 namespace App\Services\Ksef;
 
+use App\Enums\KsefEnvironment;
 use App\Models\KsefSetting;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
@@ -41,7 +43,7 @@ class KsefClient
      */
     public function accessToken(): string
     {
-        $key = 'ksef.access-token.'.$this->settings->environment->value.'.'.$this->settings->nip;
+        $key = $this->cacheKey();
 
         if ($cached = Cache::get($key)) {
             return $cached;
@@ -55,6 +57,13 @@ class KsefClient
         Cache::put($key, $token['token'], $seconds);
 
         return $token['token'];
+    }
+
+    public function cacheKey(): string
+    {
+        return 'ksef.access-token.'
+            .($this->settings->environment ?? KsefEnvironment::Test)->value
+            .'.'.$this->settings->nip;
     }
 
     /**
@@ -123,6 +132,51 @@ class KsefClient
     }
 
     /**
+     * Metadane faktur z KSeF. `subjectType` = Subject1 oznacza dokumenty, w których
+     * jesteśmy sprzedawcą, czyli faktury wystawione naszym najemcom.
+     *
+     * @return array{invoices: array<int, array<string, mixed>>, hasMore: bool}
+     */
+    public function queryInvoiceMetadata(
+        CarbonInterface $from,
+        CarbonInterface $to,
+        string $subjectType = 'Subject1',
+        int $pageOffset = 0,
+        int $pageSize = 100,
+    ): array {
+        $response = $this->json($this->request($this->accessToken())->post(
+            '/invoices/query/metadata?'.http_build_query(['pageOffset' => $pageOffset, 'pageSize' => $pageSize]),
+            [
+                'subjectType' => $subjectType,
+                'dateRange' => [
+                    'dateType' => 'Issue',
+                    'from' => $from->toIso8601String(),
+                    'to' => $to->toIso8601String(),
+                ],
+            ],
+        ));
+
+        return [
+            'invoices' => $response['invoices'] ?? [],
+            'hasMore' => (bool) ($response['hasMore'] ?? false),
+        ];
+    }
+
+    /** Treść faktury (XML) spod numeru KSeF. */
+    public function downloadInvoice(string $ksefNumber): string
+    {
+        $response = $this->request($this->accessToken())
+            ->accept('application/xml')
+            ->get('/invoices/ksef/'.$ksefNumber);
+
+        if ($response->failed()) {
+            throw new KsefException('Nie udało się pobrać faktury '.$ksefNumber.': HTTP '.$response->status(), $response->status());
+        }
+
+        return $response->body();
+    }
+
+    /**
      * Certyfikat klucza publicznego do szyfrowania tokena. Klucze bywają rotowane,
      * więc trzymamy je w cache tylko na dobę.
      *
@@ -131,7 +185,7 @@ class KsefClient
     public function tokenEncryptionKey(): array
     {
         $certificates = Cache::remember(
-            'ksef.public-keys.'.$this->settings->environment->value,
+            'ksef.public-keys.'.($this->settings->environment ?? KsefEnvironment::Test)->value,
             now()->addDay(),
             fn () => $this->json($this->request()->get('/security/public-key-certificates')),
         );

@@ -1,0 +1,172 @@
+<?php
+
+namespace App\Services\Ksef;
+
+use App\Enums\InvoiceStatus;
+use App\Models\Invoice;
+use App\Models\RentCharge;
+use App\Models\Tenant;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\DB;
+use SimpleXMLElement;
+
+/**
+ * Pobiera z KSeF faktury wystawione najemcom. Dokumenty sprzed wdrożenia aplikacji
+ * powstały w aplikacji podatnika, więc to KSeF jest ich źródłem prawdy — my je tylko
+ * odwzorowujemy, żeby kartoteka najemcy pokazywała pełną historię.
+ */
+class KsefInvoiceImporter
+{
+    /** Schemat FA(3) — wszystkie pola faktury żyją w tej przestrzeni nazw. */
+    private const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
+
+    public function __construct(private readonly KsefClient $client) {}
+
+    /**
+     * @return array{imported: int, known: int, foreign: int}
+     */
+    public function import(CarbonInterface $from, CarbonInterface $to): array
+    {
+        $tenants = $this->tenantsByNip();
+        $summary = ['imported' => 0, 'known' => 0, 'foreign' => 0];
+        $offset = 0;
+
+        do {
+            $page = $this->client->queryInvoiceMetadata($from, $to, 'Subject1', $offset);
+
+            foreach ($page['invoices'] as $metadata) {
+                $ksefNumber = $metadata['ksefNumber'] ?? null;
+                $buyerNip = $this->digits($metadata['buyer']['identifier']['value'] ?? null);
+
+                if ($ksefNumber === null) {
+                    continue;
+                }
+
+                // Interesują nas wyłącznie faktury wystawione naszym najemcom.
+                if ($buyerNip === null || ! isset($tenants[$buyerNip])) {
+                    $summary['foreign']++;
+
+                    continue;
+                }
+
+                if (Invoice::where('ksef_number', $ksefNumber)->exists()) {
+                    $summary['known']++;
+
+                    continue;
+                }
+
+                $this->store($ksefNumber, $tenants[$buyerNip]);
+                $summary['imported']++;
+            }
+
+            $offset += count($page['invoices']);
+        } while ($page['hasMore'] && $page['invoices'] !== []);
+
+        return $summary;
+    }
+
+    private function store(string $ksefNumber, Tenant $tenant): Invoice
+    {
+        $xml = $this->client->downloadInvoice($ksefNumber);
+        $document = new SimpleXMLElement($xml);
+        $document->registerXPathNamespace('fa', self::FA3_NAMESPACE);
+
+        $value = function (string $path) use ($document): ?string {
+            $found = $document->xpath($path);
+
+            return $found ? trim((string) $found[0]) : null;
+        };
+
+        $issuedOn = CarbonImmutable::parse($value('//fa:Fa/fa:P_1') ?? now()->toDateString());
+        $soldOn = CarbonImmutable::parse($value('//fa:Fa/fa:P_6') ?? $issuedOn->toDateString());
+        $due = $value('//fa:Platnosc/fa:TerminPlatnosci/fa:Termin');
+
+        $net = (float) ($value('//fa:Fa/fa:P_13_1') ?? 0);
+        $vat = (float) ($value('//fa:Fa/fa:P_14_1') ?? 0);
+        $gross = (float) ($value('//fa:Fa/fa:P_15') ?? $net + $vat);
+
+        return DB::transaction(function () use ($document, $value, $ksefNumber, $tenant, $issuedOn, $soldOn, $due, $net, $vat, $gross, $xml) {
+            $charge = $this->matchingRentCharge($tenant, $soldOn);
+
+            $invoice = Invoice::create([
+                'number' => $value('//fa:Fa/fa:P_2') ?? $ksefNumber,
+                'tenant_id' => $tenant->id,
+                'unit_id' => $charge?->unit_id,
+                'rent_charge_id' => $charge?->id,
+                'issued_on' => $issuedOn->toDateString(),
+                'sold_on' => $soldOn->toDateString(),
+                'due_on' => $due ? CarbonImmutable::parse($due)->toDateString() : $issuedOn->toDateString(),
+                'vat_rate' => $net > 0 ? round($vat / $net * 100) : 0,
+                'total_net' => $net,
+                'total_vat' => $vat,
+                'total_gross' => $gross,
+                'status' => InvoiceStatus::Sent,
+                'ksef_number' => $ksefNumber,
+                'ksef_sent_at' => $issuedOn,
+                'xml' => $xml,
+            ]);
+
+            foreach ($document->xpath('//fa:FaWiersz') ?: [] as $position => $row) {
+                $row->registerXPathNamespace('fa', self::FA3_NAMESPACE);
+                $line = fn (string $tag) => trim((string) ($row->xpath('fa:'.$tag)[0] ?? ''));
+
+                $lineNet = (float) ($line('P_11') ?: 0);
+                $lineRate = (float) ($line('P_12') ?: 0);
+                $lineVat = round($lineNet * $lineRate / 100, 2);
+
+                $invoice->lines()->create([
+                    'position' => (int) ($line('NrWierszaFa') ?: $position + 1),
+                    'name' => $line('P_7') ?: 'Pozycja faktury',
+                    'unit' => $line('P_8A') ?: 'szt.',
+                    'quantity' => (float) ($line('P_8B') ?: 1),
+                    'unit_price_net' => (float) ($line('P_9A') ?: $lineNet),
+                    'vat_rate' => $lineRate,
+                    'net' => $lineNet,
+                    'vat' => $lineVat,
+                    'gross' => round($lineNet + $lineVat, 2),
+                ]);
+            }
+
+            // Zaległa faktura domyka naliczenie czynszu: numer i termin trafiają na listę czynszów.
+            $charge?->update([
+                'invoice_number' => $invoice->number,
+                'due_on' => $invoice->due_on,
+            ]);
+
+            return $invoice;
+        });
+    }
+
+    /** Naliczenie czynszu za miesiąc sprzedaży, o ile nie ma jeszcze faktury. */
+    private function matchingRentCharge(Tenant $tenant, CarbonInterface $soldOn): ?RentCharge
+    {
+        return RentCharge::query()
+            ->where('tenant_id', $tenant->id)
+            ->whereDoesntHave('invoice')
+            ->whereBetween('month', [
+                CarbonImmutable::parse($soldOn)->startOfMonth()->toDateString(),
+                CarbonImmutable::parse($soldOn)->endOfMonth()->toDateString(),
+            ])
+            ->first();
+    }
+
+    /**
+     * @return array<string, Tenant>
+     */
+    private function tenantsByNip(): array
+    {
+        return Tenant::query()
+            ->whereNotNull('nip')
+            ->get()
+            ->mapWithKeys(fn (Tenant $tenant) => [$this->digits($tenant->nip) ?? '' => $tenant])
+            ->all();
+    }
+
+    private function digits(?string $value): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) $value);
+
+        return $digits === '' ? null : $digits;
+    }
+}

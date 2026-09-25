@@ -4,9 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Invoice;
 use App\Models\RentCharge;
+use App\Services\Ksef\KsefClient;
+use App\Services\Ksef\KsefException;
+use App\Services\Ksef\KsefInvoiceImporter;
 use App\Services\RentInvoiceFactory;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use RuntimeException;
+use Throwable;
 
 class InvoiceController extends Controller
 {
@@ -26,10 +31,13 @@ class InvoiceController extends Controller
             'invoices' => $invoices,
             'netTotal' => $invoices->sum(fn (Invoice $invoice) => (float) $invoice->total_net),
             'grossTotal' => $invoices->sum(fn (Invoice $invoice) => (float) $invoice->total_gross),
+            // Wystawiamy tylko za bieżący miesiąc — starsze naliczenia mają swoje
+            // faktury w KSeF i stamtąd je pobieramy.
             'uncharged' => RentCharge::with('unit', 'tenant')
                 ->whereDoesntHave('invoice')
                 ->whereNotNull('tenant_id')
-                ->orderByDesc('month')
+                ->whereBetween('month', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+                ->orderBy('unit_id')
                 ->get(),
         ]);
     }
@@ -60,6 +68,35 @@ class InvoiceController extends Controller
 
         return redirect()->route('invoices.show', $invoice)
             ->with('status', "Faktura {$invoice->number} została wystawiona.");
+    }
+
+    /** Pobranie z KSeF faktur wystawionych najemcom — dokumentów sprzed wdrożenia aplikacji. */
+    public function import(Request $request)
+    {
+        $data = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date', 'after_or_equal:from'],
+        ], [], ['from' => 'data od', 'to' => 'data do']);
+
+        try {
+            $summary = KsefClient::wrapConnectionErrors(fn () => app(KsefInvoiceImporter::class)->import(
+                CarbonImmutable::parse($data['from'])->startOfDay(),
+                CarbonImmutable::parse($data['to'])->endOfDay(),
+            ));
+        } catch (KsefException $e) {
+            return back()->withErrors(['invoice' => $e->getMessage()]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['invoice' => 'Import z KSeF nie powiódł się: '.$e->getMessage()]);
+        }
+
+        return back()->with('status', sprintf(
+            'Pobrano z KSeF: %d nowych faktur, %d było już w aplikacji, %d pominięto (nabywca nie jest najemcą).',
+            $summary['imported'],
+            $summary['known'],
+            $summary['foreign'],
+        ));
     }
 
     public function destroy(Invoice $invoice)

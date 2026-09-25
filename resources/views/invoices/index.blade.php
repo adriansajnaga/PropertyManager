@@ -4,6 +4,17 @@
 @section('heading', 'Faktury')
 @section('subheading', 'Faktury za czynsz wystawiane z naliczeń')
 
+@section('actions')
+    <form method="POST" action="{{ route('invoices.import') }}" class="flex flex-wrap items-end gap-2">
+        @csrf
+        <flux:input type="date" name="from" size="sm" aria-label="Pobierz od"
+            :value="old('from', now()->startOfYear()->toDateString())" />
+        <flux:input type="date" name="to" size="sm" aria-label="Pobierz do"
+            :value="old('to', now()->toDateString())" />
+        <flux:button type="submit" icon="cloud-arrow-down">Pobierz z KSeF</flux:button>
+    </form>
+@endsection
+
 @section('content')
     <div class="flex flex-wrap items-end justify-between gap-4">
         <form method="GET" class="w-40">

@@ -43,6 +43,11 @@ class Tenant extends Model
         return $this->hasMany(RentCharge::class);
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     public function currentUnits()
     {
         $today = now()->toDateString();

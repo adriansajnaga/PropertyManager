@@ -34,7 +34,21 @@ class RentInvoiceFactory
             throw new RuntimeException('Do tego naliczenia wystawiono już fakturę.');
         }
 
+        // Faktur nie wystawiamy wstecz: w aplikacji powstają wyłącznie dokumenty
+        // za bieżący miesiąc, a zaległe pobieramy z KSeF.
+        if (! $charge->month->isSameMonth(now())) {
+            throw new RuntimeException(sprintf(
+                'Czynsz za %s jest spoza bieżącego miesiąca — taką fakturę pobierz z KSeF zamiast wystawiać ponownie.',
+                $charge->month->isoFormat('MMMM YYYY'),
+            ));
+        }
+
         $issuedOn = CarbonImmutable::parse($issuedOn ?? now())->startOfDay();
+
+        if (! $issuedOn->isSameMonth(now())) {
+            throw new RuntimeException('Datę wystawienia można ustawić tylko w bieżącym miesiącu.');
+        }
+
         [$net, $vat, $gross] = $this->amounts((float) $charge->amount, (float) $settings->vat_rate, $settings->rent_is_gross);
 
         return DB::transaction(function () use ($charge, $settings, $issuedOn, $net, $vat, $gross) {
