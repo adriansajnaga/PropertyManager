@@ -197,6 +197,18 @@ class KsefConnectionTest extends TestCase
         $this->get(route('ksef-settings.edit'))->assertOk()->assertDontSee('NOWY-TOKEN');
     }
 
+    public function test_the_settings_can_also_be_saved_with_a_plain_post(): void
+    {
+        // Część serwerów gubi ukryte pole `_method`, więc trasa przyjmuje oba sposoby.
+        $this->post(route('ksef-settings.update'), [
+            'environment' => 'prod',
+            'nip' => '9221122333',
+            'token' => 'PRODUKCYJNY',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame(\App\Enums\KsefEnvironment::Prod, KsefSetting::first()->environment);
+    }
+
     public function test_an_empty_token_field_keeps_the_saved_one(): void
     {
         $this->put(route('ksef-settings.update'), [

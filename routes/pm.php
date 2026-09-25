@@ -27,7 +27,10 @@ Route::middleware(['auth'])->group(function () {
         Route::post('mail-settings/test', [MailSettingController::class, 'test'])->name('mail-settings.test');
 
         Route::get('ksef-settings', [KsefSettingController::class, 'edit'])->name('ksef-settings.edit');
-        Route::put('ksef-settings', [KsefSettingController::class, 'update'])->name('ksef-settings.update');
+        // POST obok PUT: podmiana metody ukrytym polem `_method` bywa gubiona po drodze,
+        // a zapis ustawień nie ma powodu się o to wykładać.
+        Route::match(['put', 'post'], 'ksef-settings', [KsefSettingController::class, 'update'])
+            ->name('ksef-settings.update');
         Route::post('ksef-settings/test', [KsefSettingController::class, 'test'])->name('ksef-settings.test');
     });
 
