@@ -98,8 +98,11 @@ class KsefConnectionTest extends TestCase
                 'accessToken' => ['token' => 'DOSTEPOWY', 'validUntil' => now()->addHour()->toIso8601String()],
                 'refreshToken' => ['token' => 'ODSWIEZAJACY'],
             ]),
-            '*/auth/sessions/current' => Http::response([
-                'contextIdentifier' => ['type' => 'Nip', 'value' => '9221122333'],
+            '*/auth/sessions*' => Http::response([
+                'items' => [
+                    ['referenceNumber' => 'REF-000', 'isCurrent' => false, 'startDate' => '2026-09-01T07:00:00Z'],
+                    ['referenceNumber' => 'REF-001', 'isCurrent' => true, 'startDate' => '2026-09-25T08:00:00Z'],
+                ],
             ]),
         ], $overrides));
     }
@@ -227,7 +230,8 @@ class KsefConnectionTest extends TestCase
         $this->post(route('ksef-settings.test'))
             ->assertRedirect()
             ->assertSessionHas('status', fn ($status) => str_contains($status, 'działa')
-                && str_contains($status, '9221122333'));
+                && str_contains($status, '9221122333')
+                && str_contains($status, '25.09.2026'));
 
         $this->assertNotNull(KsefSetting::first()->verified_at);
     }

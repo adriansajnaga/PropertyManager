@@ -100,10 +100,26 @@ class KsefClient
         return $tokens['accessToken'];
     }
 
-    /** Dane bieżącej sesji — używane do sprawdzenia, czy konfiguracja działa. */
+    /**
+     * Bieżąca sesja uwierzytelnienia — używana do sprawdzenia, czy konfiguracja działa.
+     * Listę daje GET /auth/sessions; ścieżka /auth/sessions/current obsługuje wyłącznie
+     * DELETE (unieważnienie), więc odpytywanie jej kończyło się odpowiedzią 405.
+     */
     public function currentSession(): array
     {
-        return $this->json($this->request($this->accessToken())->get('/auth/sessions/current'));
+        $response = $this->json(
+            $this->request($this->accessToken())->get('/auth/sessions', ['pageSize' => 20]),
+        );
+
+        $sessions = $response['items'] ?? [];
+
+        foreach ($sessions as $session) {
+            if ($session['isCurrent'] ?? false) {
+                return $session;
+            }
+        }
+
+        return $sessions[0] ?? [];
     }
 
     /**

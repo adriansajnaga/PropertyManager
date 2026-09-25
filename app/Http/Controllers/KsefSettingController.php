@@ -6,6 +6,7 @@ use App\Enums\KsefEnvironment;
 use App\Models\KsefSetting;
 use App\Services\Ksef\KsefClient;
 use App\Services\Ksef\KsefException;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
@@ -71,10 +72,15 @@ class KsefSettingController extends Controller
 
         $settings->forceFill(['verified_at' => now()])->save();
 
+        $started = isset($session['startDate'])
+            ? ' Sesja z '.CarbonImmutable::parse($session['startDate'])->format('d.m.Y, H:i').'.'
+            : '';
+
         return back()->with('status', sprintf(
-            'Połączenie z KSeF (%s) działa. Kontekst: %s.',
+            'Połączenie z KSeF (%s) działa — uwierzytelniono NIP %s.%s',
             $settings->environment->label(),
-            $session['contextIdentifier']['value'] ?? $settings->nip,
+            $settings->nip,
+            $started,
         ));
     }
 }
