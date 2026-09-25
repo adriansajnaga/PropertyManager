@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\InvoiceSetting;
+use Illuminate\Http\Request;
+
+class InvoiceSettingController extends Controller
+{
+    public function edit()
+    {
+        return view('invoice-settings.edit', ['settings' => InvoiceSetting::current()]);
+    }
+
+    public function update(Request $request)
+    {
+        $data = $request->validate([
+            'seller_name' => ['required', 'string', 'max:255'],
+            'seller_nip' => ['required', 'string', 'max:20'],
+            'seller_address_l1' => ['required', 'string', 'max:255'],
+            'seller_address_l2' => ['required', 'string', 'max:255'],
+            'seller_phone' => ['nullable', 'string', 'max:32'],
+            'bank_account' => ['nullable', 'string', 'max:64'],
+            'bank_swift' => ['nullable', 'string', 'max:16'],
+            'issue_place' => ['nullable', 'string', 'max:255'],
+            'payment_days' => ['required', 'integer', 'min:0', 'max:180'],
+            'vat_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'rent_is_gross' => ['boolean'],
+            'line_description' => ['required', 'string', 'max:255'],
+        ], [], [
+            'seller_name' => 'nazwa sprzedawcy',
+            'seller_nip' => 'NIP sprzedawcy',
+            'seller_address_l1' => 'ulica i numer',
+            'seller_address_l2' => 'kod pocztowy i miejscowość',
+            'payment_days' => 'termin płatności',
+            'vat_rate' => 'stawka VAT',
+            'line_description' => 'opis pozycji',
+        ]);
+
+        $data['rent_is_gross'] = $request->boolean('rent_is_gross');
+
+        InvoiceSetting::current()->fill($data)->save();
+
+        return redirect()->route('invoice-settings.edit')
+            ->with('status', 'Ustawienia faktur zostały zapisane.');
+    }
+}

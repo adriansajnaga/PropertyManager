@@ -29,6 +29,7 @@
                     <flux:navlist.item icon="receipt-percent" :href="route('utility-bills.index')" :current="request()->routeIs('utility-bills.*')">Rachunki</flux:navlist.item>
                     <flux:navlist.item icon="fire" :href="route('heat-settlements.index')" :current="request()->routeIs('heat-settlements.*')">Koszty ciepła</flux:navlist.item>
                     <flux:navlist.item icon="banknotes" :href="route('rent-charges.index')" :current="request()->routeIs('rent-charges.*')">Czynsz</flux:navlist.item>
+                    <flux:navlist.item icon="document-text" :href="route('invoices.index')" :current="request()->routeIs('invoices.*')">Faktury</flux:navlist.item>
                     <flux:navlist.item icon="calculator" :href="route('tenant-settlements.index')" :current="request()->routeIs('tenant-settlements.*')">Rozliczenia</flux:navlist.item>
                 </flux:navlist.group>
                 @if (auth()->user()?->isAdmin())
@@ -43,6 +44,9 @@
                         </flux:navlist.item>
                         <flux:navlist.item icon="document-check" :href="route('ksef-settings.edit')" :current="request()->routeIs('ksef-settings.*')">
                             KSeF
+                        </flux:navlist.item>
+                        <flux:navlist.item icon="receipt-percent" :href="route('invoice-settings.edit')" :current="request()->routeIs('invoice-settings.*')">
+                            Ustawienia faktur
                         </flux:navlist.item>
                     </flux:navlist.group>
                 @endif

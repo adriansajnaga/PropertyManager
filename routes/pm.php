@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\HeatSettlementController;
+use App\Http\Controllers\InvoiceController;
+use App\Http\Controllers\InvoiceSettingController;
 use App\Http\Controllers\KsefSettingController;
 use App\Http\Controllers\MailSettingController;
 use App\Http\Controllers\MaintenanceCostController;
@@ -32,6 +34,9 @@ Route::middleware(['auth'])->group(function () {
         Route::match(['put', 'post'], 'ksef-settings', [KsefSettingController::class, 'update'])
             ->name('ksef-settings.update');
         Route::post('ksef-settings/test', [KsefSettingController::class, 'test'])->name('ksef-settings.test');
+
+        Route::get('invoice-settings', [InvoiceSettingController::class, 'edit'])->name('invoice-settings.edit');
+        Route::post('invoice-settings', [InvoiceSettingController::class, 'update'])->name('invoice-settings.update');
     });
 
     Route::middleware('admin')->prefix('users')->name('users.')->group(function () {
@@ -54,6 +59,8 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('readings', ReadingController::class)->except('show');
     Route::resource('maintenance-costs', MaintenanceCostController::class)->except('show');
     Route::resource('utility-bills', UtilityBillController::class);
+
+    Route::resource('invoices', InvoiceController::class)->only(['index', 'show', 'store', 'destroy']);
 
     Route::resource('rent-charges', RentChargeController::class)->except('show');
     Route::post('rent-charges/{rentCharge}/paid', [RentChargeController::class, 'togglePaid'])->name('rent-charges.paid');
