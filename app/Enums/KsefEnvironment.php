@@ -30,6 +30,16 @@ enum KsefEnvironment: string
         };
     }
 
+    /** Adres, z którego korzystają kody QR weryfikujące fakturę. */
+    public function qrBaseUrl(): string
+    {
+        return match ($this) {
+            self::Test => 'https://qr-test.ksef.mf.gov.pl',
+            self::Demo => 'https://qr-demo.ksef.mf.gov.pl',
+            self::Prod => 'https://qr.ksef.mf.gov.pl',
+        };
+    }
+
     public function isProduction(): bool
     {
         return $this === self::Prod;

@@ -100,6 +100,7 @@
                         </flux:table.cell>
                         <flux:table.cell align="end">
                             <flux:button size="sm" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" tooltip="Podgląd" />
+                            <flux:button size="sm" variant="ghost" icon="document-arrow-down" :href="route('invoices.pdf', $invoice)" tooltip="Pobierz PDF" />
                             @unless ($invoice->isInKsef())
                                 <x-delete-button :action="route('invoices.destroy', $invoice)"
                                     confirm="Usunąć fakturę {{ $invoice->number }}? Numer zostanie zwolniony." />

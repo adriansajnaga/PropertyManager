@@ -5,6 +5,8 @@
 @section('subheading', 'Wystawiona '.$invoice->issued_on->format('d.m.Y').' · termin płatności '.$invoice->due_on->format('d.m.Y'))
 
 @section('actions')
+    <flux:button icon="document-arrow-down" :href="route('invoices.pdf', $invoice)">PDF</flux:button>
+
     @unless ($invoice->isInKsef())
         <form method="POST" action="{{ route('invoices.send', $invoice) }}" class="inline">
             @csrf

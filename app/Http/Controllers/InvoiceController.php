@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Invoice;
+use App\Models\InvoiceSetting;
 use App\Models\RentCharge;
 use App\Services\Ksef\KsefClient;
 use App\Services\Ksef\KsefException;
 use App\Services\Ksef\KsefInvoiceImporter;
+use App\Services\Ksef\InvoiceQrCode;
 use App\Services\Ksef\KsefInvoiceSender;
 use App\Services\RentInvoiceFactory;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use RuntimeException;
@@ -140,6 +143,20 @@ class InvoiceController extends Controller
             $summary['known'],
             $summary['foreign'],
         ));
+    }
+
+    /** Wizualizacja faktury w PDF, z kodem QR weryfikującym ją w KSeF. */
+    public function pdf(Invoice $invoice, InvoiceQrCode $qr)
+    {
+        $invoice->load('lines', 'tenant', 'unit');
+        $url = $qr->url($invoice);
+
+        return Pdf::loadView('pdf.invoice', [
+            'invoice' => $invoice,
+            'settings' => InvoiceSetting::current(),
+            'qrUrl' => $url,
+            'qrCode' => $url ? $qr->dataUri($url) : null,
+        ])->setPaper('a4')->download('faktura-'.str($invoice->number)->slug().'.pdf');
     }
 
     public function destroy(Invoice $invoice)
