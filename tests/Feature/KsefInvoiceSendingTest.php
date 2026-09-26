@@ -34,6 +34,7 @@ class KsefInvoiceSendingTest extends TestCase
         $this->seed(DemoSeeder::class);
         $this->actingAs(User::factory()->admin()->create());
         $this->configureKsef();
+        $this->fakeKsefSending();
 
         InvoiceSetting::create([
             'seller_name' => 'ASCOMM Adrian Sajnaga',
@@ -166,6 +167,30 @@ class KsefInvoiceSendingTest extends TestCase
         $this->assertSame('1/9/2026', $this->xpath($xml, '//fa:Fa/fa:P_2'));
         $this->assertSame(strlen($xml), $document['invoiceSize']);
         $this->assertSame(base64_encode(hash('sha256', $xml, true)), $document['invoiceHash']);
+    }
+
+    public function test_after_sending_the_invoice_is_read_back_from_ksef(): void
+    {
+        $invoice = $this->invoice();
+
+        // W rejestrze faktura leży pod innym numerem — tak wygląda dokument, który
+        // KSeF odda przy pobraniu.
+        $fromKsef = str_replace(
+            '<P_2>1/9/2026</P_2>',
+            '<P_2>4/9/2026</P_2>',
+            app(Fa3InvoiceBuilder::class)->build($invoice),
+        );
+
+        $this->fakeKsefSending([
+            '*/invoices/ksef/8792451081-20260926-9132F5C00005-ED' => Http::response($fromKsef),
+        ]);
+
+        $this->post(route('invoices.send', $invoice))->assertRedirect();
+
+        // To, co leży w rejestrze, jest wersją obowiązującą — także numer.
+        $invoice->refresh();
+        $this->assertSame('4/9/2026', $invoice->number);
+        $this->assertSame($fromKsef, $invoice->xml);
     }
 
     public function test_a_rejected_invoice_keeps_the_reason(): void

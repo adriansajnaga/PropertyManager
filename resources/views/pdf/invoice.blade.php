@@ -25,14 +25,18 @@
         table.plain td { padding: .4mm 0; vertical-align: top; }
         table.grid th, table.grid td { border: .5pt solid #999; padding: .7mm 1.5mm; }
         table.grid th { background: #f1f1f1; font-size: 7pt; text-align: left; font-weight: bold; }
-        .num { text-align: right; }
-        .ctr { text-align: center; }
+        /* Wyrównanie musi być mocniejsze niż reguła całej tabeli, inaczej nagłówki
+           zostają przy lewej krawędzi mimo klasy. */
+        .num, table.grid th.num, table.grid td.num { text-align: right; }
+        .ctr, table.grid th.ctr, table.grid td.ctr { text-align: center; }
         .muted { color: #666; }
         .xs { font-size: 7.5pt; }
         .b { font-weight: bold; }
         .party { border: .5pt solid #999; padding: 2.5mm; }
         .party .label { font-size: 7.5pt; color: #666; }
-        .totals td { border: .5pt solid #999; padding: 1.6mm 3mm; }
+        /* Tabelka podsumowania siedzi w tabeli układu, więc jej odstępy trzeba
+           zapisać tak samo szczegółowo jak tamtej. */
+        table.totals td { border: .5pt solid #999; padding: 1.6mm 2.5mm; }
         .totals .grand { background: #f1f1f1; font-weight: bold; font-size: 10pt; }
         .ksef { border: .5pt solid #999; padding: 2mm; }
         /* Podpisy i stopka w jednym bloku przy dolnej krawędzi pierwszej strony. */

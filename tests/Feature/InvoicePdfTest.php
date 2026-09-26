@@ -36,6 +36,8 @@ class InvoicePdfTest extends TestCase
         $this->seed(DemoSeeder::class);
         $this->actingAs(User::factory()->admin()->create());
         $this->configureKsef();
+        // Numer faktury nadaje KSeF, więc rejestr musi odpowiadać w każdym teście.
+        $this->fakeKsefSending();
 
         InvoiceSetting::create([
             'seller_name' => 'ASCOMM Adrian Sajnaga',

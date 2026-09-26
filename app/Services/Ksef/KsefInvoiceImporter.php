@@ -102,6 +102,50 @@ class KsefInvoiceImporter
         return $windows;
     }
 
+    /**
+     * Potwierdzenie wysłanej faktury: ściągamy z KSeF to, co tam rzeczywiście
+     * leży, i tym nadpisujemy zapis w bazie. Dzięki temu lokalna kartoteka jest
+     * odbiciem KSeF, a nie tym, co aplikacja sama sobie dopisała po wysyłce.
+     */
+    public function confirm(Invoice $invoice): Invoice
+    {
+        if (blank($invoice->ksef_number)) {
+            return $invoice;
+        }
+
+        $xml = $this->client->downloadInvoice($invoice->ksef_number);
+        $value = $this->reader($xml);
+
+        $issuedOn = CarbonImmutable::parse($value('//fa:Fa/fa:P_1') ?? $invoice->issued_on->toDateString());
+        $due = $value('//fa:Platnosc/fa:TerminPlatnosci/fa:Termin');
+
+        $invoice->update([
+            'number' => $value('//fa:Fa/fa:P_2') ?? $invoice->number,
+            'issued_on' => $issuedOn->toDateString(),
+            'sold_on' => CarbonImmutable::parse($value('//fa:Fa/fa:P_6') ?? $issuedOn->toDateString())->toDateString(),
+            'due_on' => $due ? CarbonImmutable::parse($due)->toDateString() : $invoice->due_on->toDateString(),
+            'total_net' => (float) ($value('//fa:Fa/fa:P_13_1') ?? $invoice->total_net),
+            'total_vat' => (float) ($value('//fa:Fa/fa:P_14_1') ?? $invoice->total_vat),
+            'total_gross' => (float) ($value('//fa:Fa/fa:P_15') ?? $invoice->total_gross),
+            'xml' => $xml,
+        ]);
+
+        return $invoice->refresh();
+    }
+
+    /** Odczyt pól FA(3) po ścieżce XPath. */
+    private function reader(string $xml): callable
+    {
+        $document = new SimpleXMLElement($xml);
+        $document->registerXPathNamespace('fa', self::FA3_NAMESPACE);
+
+        return function (string $path) use ($document): ?string {
+            $found = $document->xpath($path);
+
+            return $found ? trim((string) $found[0]) : null;
+        };
+    }
+
     private function store(string $ksefNumber, Tenant $tenant): Invoice
     {
         $xml = $this->client->downloadInvoice($ksefNumber);

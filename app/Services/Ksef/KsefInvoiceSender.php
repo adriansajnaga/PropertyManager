@@ -5,6 +5,7 @@ namespace App\Services\Ksef;
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\KsefSetting;
+use Throwable;
 
 /**
  * Wysyłka faktury do KSeF sesją interaktywną.
@@ -21,6 +22,7 @@ class KsefInvoiceSender
     public function __construct(
         private readonly KsefClient $client,
         private readonly Fa3InvoiceBuilder $builder,
+        private readonly KsefInvoiceImporter $importer,
     ) {}
 
     public function send(Invoice $invoice): Invoice
@@ -77,6 +79,17 @@ class KsefInvoiceSender
             'ksef_error' => null,
             'xml' => $xml,
         ]);
+
+        $invoice->refresh();
+
+        // KSeF jest źródłem prawdy: zaraz po przyjęciu pobieramy stamtąd fakturę
+        // i to jej treścią nadpisujemy zapis w bazie. Gdy dokument nie zdążył się
+        // jeszcze pojawić, zostaje wysłany XML — potwierdzi go kolejny import.
+        try {
+            $this->importer->confirm($invoice);
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         return $invoice->refresh();
     }

@@ -10,7 +10,10 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Services\RentInvoiceFactory;
 use Database\Seeders\DemoSeeder;
+use App\Services\Ksef\KsefException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Tests\Support\FakesKsefApi;
 use Tests\TestCase;
 
 /**
@@ -20,6 +23,7 @@ use Tests\TestCase;
  */
 class RentInvoiceTest extends TestCase
 {
+    use FakesKsefApi;
     use RefreshDatabase;
 
     protected function setUp(): void
@@ -30,6 +34,10 @@ class RentInvoiceTest extends TestCase
         $this->seed(DemoSeeder::class);
         $this->actingAs(User::factory()->admin()->create());
 
+        // Numer faktury nadaje KSeF, więc bez rejestru nic się nie wystawi.
+        $this->configureKsef();
+        $this->ksefHas();
+
         InvoiceSetting::create([
             'seller_name' => 'ASCOMM Adrian Sajnaga',
             'seller_nip' => '8792451081',
@@ -39,6 +47,17 @@ class RentInvoiceTest extends TestCase
             'payment_days' => 7,
             'vat_rate' => 23,
             'rent_is_gross' => true,
+        ]);
+    }
+
+    /** Faktury, o których wie rejestr — z nich wynika kolejny numer. */
+    private function ksefHas(string ...$numbers): void
+    {
+        $this->fakeKsefSending([
+            '*/invoices/query/metadata*' => Http::response([
+                'invoices' => array_map(fn ($number) => ['invoiceNumber' => $number], $numbers),
+                'hasMore' => false,
+            ]),
         ]);
     }
 
@@ -80,35 +99,41 @@ class RentInvoiceTest extends TestCase
         $this->assertSame('1230.00', $invoice->total_gross);
     }
 
-    public function test_the_number_counts_within_the_month_and_the_due_date_follows_the_setting(): void
+    public function test_the_number_follows_the_register_and_the_due_date_the_setting(): void
     {
         $factory = app(RentInvoiceFactory::class);
 
         $first = $factory->fromRentCharge($this->charge(1230));
-        $second = $factory->fromRentCharge($this->charge(1845, 'Lokal 14'));
 
         $this->assertSame('1/9/2026', $first->number);
-        $this->assertSame('2/9/2026', $second->number);
         $this->assertSame('2026-09-08', $first->due_on->toDateString());
         $this->assertSame('2026-09-01', $first->sold_on->toDateString());
+
+        // Kolejny numer pojawia się dopiero wtedy, gdy rejestr zna poprzednią fakturę.
+        $this->ksefHas('1/9/2026');
+
+        $this->assertSame('2/9/2026', $factory->fromRentCharge($this->charge(1845, 'Lokal 14'))->number);
     }
 
     public function test_a_number_already_taken_outside_the_application_is_skipped(): void
     {
-        Invoice::create([
-            'number' => '1/9/2026',
-            'issued_on' => '2026-09-01',
-            'sold_on' => '2026-09-01',
-            'due_on' => '2026-09-08',
-            'vat_rate' => 23,
-            'total_net' => 100,
-            'total_vat' => 23,
-            'total_gross' => 123,
-        ]);
+        // Faktura wystawiona poza aplikacją istnieje tylko w rejestrze.
+        $this->ksefHas('1/9/2026');
 
         $invoice = app(RentInvoiceFactory::class)->fromRentCharge($this->charge());
 
         $this->assertSame('2/9/2026', $invoice->number);
+    }
+
+    public function test_a_second_document_waits_until_the_first_one_reaches_ksef(): void
+    {
+        $factory = app(RentInvoiceFactory::class);
+        $factory->fromRentCharge($this->charge(1230));
+
+        // Rejestr wciąż nie zna faktury 1/9/2026, więc podałby zajęty numer.
+        $this->expectException(KsefException::class);
+
+        $factory->fromRentCharge($this->charge(1845, 'Lokal 14'));
     }
 
     public function test_the_rent_charge_takes_the_invoice_number_and_due_date(): void

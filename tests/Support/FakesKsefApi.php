@@ -5,6 +5,7 @@ namespace Tests\Support;
 use App\Enums\KsefEnvironment;
 use App\Models\KsefSetting;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Http;
 use phpseclib3\Crypt\RSA;
 use phpseclib3\Crypt\RSA\PrivateKey;
@@ -108,6 +109,10 @@ trait FakesKsefApi
      */
     protected function fakeKsefSending(array $overrides = []): void
     {
+        // Kolejne wywołanie ma zastąpić poprzednie podstawienia, a nie ustawić się
+        // za nimi w kolejce — pierwszy pasujący wzorzec i tak wygrywa.
+        Http::swap(new HttpFactory);
+
         Http::fake(array_merge([
             '*/security/public-key-certificates' => Http::response($this->ksefPublicKeysResponse()),
             '*/sessions/online' => Http::response([

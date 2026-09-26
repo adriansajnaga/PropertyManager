@@ -10,9 +10,11 @@ use Carbon\CarbonInterface;
 use Throwable;
 
 /**
- * Numer faktury to „kolejny/miesiąc/rok" (np. 3/9/2026). Kolejny numer musi
- * uwzględniać faktury wystawione poza aplikacją, dlatego przed nadaniem numeru
- * pytamy KSeF o dokumenty z tego miesiąca i bierzemy najwyższy zajęty numer.
+ * Numer faktury to „kolejny/miesiąc/rok" (np. 3/9/2026). O kolejny numer pyta się
+ * wyłącznie KSeF — to on jest rejestrem faktur, także tych wystawionych poza
+ * aplikacją. Lokalna baza nie bierze udziału w liczeniu, bo sama pochodzi z importu
+ * z KSeF, a dokumenty z innego środowiska w ogóle nie należą do tej serii.
+ * Rachunki imienne KSeF-u nie dotyczą i mają własny, lokalny licznik.
  */
 class InvoiceNumbering
 {
@@ -20,33 +22,48 @@ class InvoiceNumbering
 
     /**
      * @return array{number: string, highest: int, warning: ?string}
+     *
+     * @throws KsefException gdy KSeF nie odpowiada — numeru nie zgadujemy
      */
     public function next(CarbonInterface $issuedOn, DocumentType $type = DocumentType::Invoice): array
     {
         $month = CarbonImmutable::parse($issuedOn);
-        $warning = null;
-        $highest = $this->highestLocally($month, $type);
 
-        // Rachunki są tylko w aplikacji, więc ich numeracji KSeF nie zna.
-        if ($type->goesToKsef() && KsefSetting::current()->isConfigured()) {
-            try {
-                $highest = max($highest, $this->highestInKsef($month));
-            } catch (Throwable $e) {
-                $warning = 'Nie udało się sprawdzić numeracji w KSeF: '.$e->getMessage()
-                    .' Numer nadano na podstawie faktur w aplikacji — sprawdź go przed wysyłką.';
-            }
+        if (! $type->goesToKsef()) {
+            return $this->fromApplication($month, $type);
         }
 
+        if (! KsefSetting::current()->isConfigured()) {
+            throw new KsefException(
+                'Numer faktury nadaje KSeF, a połączenie nie jest skonfigurowane. '
+                .'Uzupełnij ustawienia KSeF w Administracji.'
+            );
+        }
+
+        try {
+            $highest = $this->highestInKsef($month);
+        } catch (Throwable $e) {
+            throw new KsefException(
+                'Nie udało się pobrać numeracji z KSeF: '.$e->getMessage()
+                .' Faktury nie numerujemy na własną rękę — spróbuj ponownie za chwilę.'
+            );
+        }
+
+        $number = ($highest + 1).'/'.$month->month.'/'.$month->year;
+
+        $this->refuseIfTaken($number);
+
         return [
-            'number' => ($highest + 1).'/'.$month->month.'/'.$month->year,
+            'number' => $number,
             'highest' => $highest,
-            'warning' => $warning,
+            'warning' => null,
         ];
     }
 
-    private function highestLocally(CarbonImmutable $month, DocumentType $type): int
+    /** Rachunki: numeracja z własnych dokumentów, bo nie ma ich w żadnym rejestrze. */
+    private function fromApplication(CarbonImmutable $month, DocumentType $type): array
     {
-        return Invoice::query()
+        $highest = Invoice::query()
             ->where('document_type', $type)
             ->whereYear('issued_on', $month->year)
             ->whereMonth('issued_on', $month->month)
@@ -54,6 +71,35 @@ class InvoiceNumbering
             ->map(fn ($number) => $this->position((string) $number, $month))
             ->push(0)
             ->max();
+
+        return [
+            'number' => ($highest + 1).'/'.$month->month.'/'.$month->year,
+            'highest' => $highest,
+            'warning' => null,
+        ];
+    }
+
+    /**
+     * KSeF nie wie o fakturze, która czeka w aplikacji na wysyłkę, więc podałby
+     * numer już zajęty. Nie liczymy wtedy po swojemu — wstrzymujemy wystawienie,
+     * bo najpierw ten dokument ma trafić do rejestru.
+     */
+    private function refuseIfTaken(string $number): void
+    {
+        $taken = Invoice::query()
+            ->where('document_type', DocumentType::Invoice)
+            ->where('number', $number)
+            ->first();
+
+        if ($taken === null) {
+            return;
+        }
+
+        throw new KsefException($taken->ksef_number === null
+            ? "KSeF podał numer {$number}, a w aplikacji czeka już faktura o tym numerze, "
+                .'której tam nie ma. Wyślij ją najpierw do KSeF.'
+            : "KSeF podał numer {$number}, a faktura o tym numerze jest już w aplikacji — "
+                .'rejestr jeszcze jej nie pokazuje. Pobierz listę faktur z KSeF i spróbuj ponownie.');
     }
 
     private function highestInKsef(CarbonImmutable $month): int
