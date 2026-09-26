@@ -32,8 +32,10 @@
             </div>
 
             <flux:input type="file" name="logo" label="Logo na fakturze" badge="opcjonalnie"
-                accept=".png,.jpg,.jpeg"
-                :description="$settings->logo_path ? 'Logo jest wgrane — wybór nowego pliku je zastąpi.' : 'PNG albo JPG, najlepiej z przezroczystym tłem, do 2 MB.'" />
+                accept=".png,.jpg,.jpeg,.gif,.webp"
+                :description="$settings->logo_path
+                    ? 'Logo jest wgrane — wybór nowego pliku je zastąpi.'
+                    : 'PNG, JPG, GIF albo WEBP, do 2 MB. Przezroczyste tło zostanie zamienione na białe.'" />
 
             <flux:separator variant="subtle" />
 

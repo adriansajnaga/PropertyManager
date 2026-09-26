@@ -42,13 +42,14 @@
         .page-number { position: fixed; bottom: -13mm; right: 0; font-size: 7pt; color: #444; }
         .page-number:after { content: counter(page) " z {{ $qrUrl ? 2 : 1 }}"; }
         /* Strona weryfikacyjna odwzorowuje wizualizację z KSeF. */
-        .verify { page-break-before: always; padding-top: 6mm; }
-        .verify h2 { font-size: 13pt; margin: 0 0 6mm; font-weight: normal; }
-        .verify .hint { font-size: 8pt; color: #333; margin: 0 0 2mm; }
-        .verify .link { font-size: 8pt; word-break: break-all; color: #1d4ed8; }
-        .verify .ksef-number { font-size: 10pt; margin-top: 5mm; }
-        .verify .made-in { font-size: 8pt; color: #333; margin-top: 3mm; }
-        .verify .environment { text-align: center; font-size: 9pt; color: #777; margin-top: 45mm; }
+        .verify { page-break-before: always; padding-top: 0; }
+        .verify .box { width: 118mm; }
+        .verify h2 { font-size: 11pt; margin: 0 0 3.5mm; font-weight: normal; }
+        .verify .hint { font-size: 7pt; color: #333; margin: 0 0 1.5mm; }
+        .verify .link { font-size: 7pt; word-break: break-all; color: #1d4ed8; }
+        .verify .ksef-number { font-size: 8.5pt; margin-top: 3mm; }
+        .verify .made-in { font-size: 7pt; color: #333; margin-top: 1.5mm; }
+        .verify .environment { text-align: center; font-size: 8pt; color: #777; margin-top: 55mm; }
     </style>
 </head>
 <body>
@@ -197,17 +198,19 @@
         @if (! $isReceipt && $settings->seller_regon) · REGON: {{ $settings->seller_regon }}@endif
         · wystawiono w {{ config('app.name') }}
     </div>
-    
-    @if ($qrUrl)
-        <div class="verify">
+</div>
+
+@if ($qrUrl)
+    <div class="verify">
+        <div class="box">
             <h2>Sprawdź, czy Twoja faktura znajduje się w KSeF!</h2>
-    
+
             <table class="plain">
                 <tr>
-                    <td style="width: 52mm; vertical-align: top">
-                        <img src="{{ $qrCode }}" alt="Kod QR weryfikujący fakturę" style="width: 50mm; height: 50mm">
+                    <td style="width: 42mm; vertical-align: top">
+                        <img src="{{ $qrCode }}" alt="Kod QR weryfikujący fakturę" style="width: 40mm; height: 40mm">
                     </td>
-                    <td style="vertical-align: top; padding-left: 4mm">
+                    <td style="vertical-align: top; padding-left: 3mm">
                         <p class="hint">
                             Nie możesz zeskanować kodu z obrazka? Kliknij w link weryfikacyjny
                             i przejdź do weryfikacji faktury!
@@ -216,17 +219,17 @@
                     </td>
                 </tr>
             </table>
-    
+
             <div class="ksef-number b">{{ $invoice->ksef_number }}</div>
-    
+
             <div class="made-in">Wytworzona w: {{ config('app.name') }}</div>
-    
-            @if ($environmentNote ?? null)
-                <div class="environment">{{ $environmentNote }}</div>
-            @endif
         </div>
-    @endif
-</div>
+
+        @if ($environmentNote ?? null)
+            <div class="environment">{{ $environmentNote }}</div>
+        @endif
+    </div>
+@endif
 
 <div class="page-number"></div>
 

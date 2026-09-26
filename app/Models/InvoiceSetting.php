@@ -55,8 +55,18 @@ class InvoiceSetting extends Model
         }
 
         $contents = \Illuminate\Support\Facades\Storage::disk('local')->get($this->logo_path);
-        $mime = str($this->logo_path)->endsWith('.png') ? 'image/png'
-            : (str($this->logo_path)->endsWith('.svg') ? 'image/svg+xml' : 'image/jpeg');
+
+        // Typ bierzemy z zawartości, nie z rozszerzenia — plik bywa wgrany z inną nazwą.
+        $mime = match (true) {
+            str_starts_with($contents, "PNG") => 'image/png',
+            str_starts_with($contents, 'GIF8') => 'image/gif',
+            str_starts_with(substr($contents, 8), 'WEBP') => 'image/webp',
+            default => 'image/jpeg',
+        };
+
+        if (! \App\Support\InvoiceLogo::renderable($mime)) {
+            return null;
+        }
 
         return 'data:'.$mime.';base64,'.base64_encode($contents);
     }

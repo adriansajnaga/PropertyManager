@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InvoiceSetting;
+use App\Support\InvoiceLogo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -34,7 +35,7 @@ class InvoiceSettingController extends Controller
             'receipt_address_l2' => ['nullable', 'string', 'max:255'],
             'receipt_identifier' => ['nullable', 'string', 'max:64'],
             'receipt_note' => ['nullable', 'string', 'max:255'],
-            'logo' => ['nullable', 'file', 'mimes:png,jpg,jpeg', 'max:2048'],
+            'logo' => ['nullable', 'file', 'mimes:'.InvoiceLogo::ACCEPTED, 'max:2048'],
         ], [], [
             'seller_name' => 'nazwa sprzedawcy',
             'seller_nip' => 'NIP sprzedawcy',
@@ -54,7 +55,7 @@ class InvoiceSettingController extends Controller
                 Storage::disk('local')->delete($settings->logo_path);
             }
 
-            $data['logo_path'] = $request->file('logo')->store('invoice-logo', 'local');
+            $data['logo_path'] = InvoiceLogo::store($request->file('logo'));
         }
 
         unset($data['logo']);

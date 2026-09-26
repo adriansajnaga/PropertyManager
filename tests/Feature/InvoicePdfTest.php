@@ -8,8 +8,11 @@ use App\Models\Unit;
 use App\Models\User;
 use App\Services\Ksef\InvoiceQrCode;
 use App\Services\RentInvoiceFactory;
+use App\Support\InvoiceLogo;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\FakesKsefApi;
 use Tests\TestCase;
 
@@ -144,5 +147,64 @@ class InvoicePdfTest extends TestCase
     public function test_an_invoice_without_xml_has_no_verification_link(): void
     {
         $this->assertNull(app(InvoiceQrCode::class)->url($this->invoice()));
+    }
+
+    public function test_the_logo_lands_in_the_pdf_as_data(): void
+    {
+        // JPEG wchodzi do PDF bez rozszerzenia GD, więc logo trzymamy w tym formacie.
+        Storage::disk('local')->put('invoice-logo/logo.jpg', $this->jpeg());
+        InvoiceSetting::current()->update(['logo_path' => 'invoice-logo/logo.jpg']);
+
+        $invoice = $this->invoice();
+
+        $html = view('pdf.invoice', [
+            'invoice' => $invoice->load('lines', 'tenant'),
+            'settings' => InvoiceSetting::current()->fresh(),
+            'qrUrl' => null,
+            'qrCode' => null,
+        ])->render();
+
+        $this->assertStringContainsString('data:image/jpeg;base64,', $html);
+        $this->get(route('invoices.pdf', $invoice))->assertOk();
+    }
+
+    public function test_a_logo_in_another_format_is_converted_when_uploaded(): void
+    {
+        if (! InvoiceLogo::canConvert()) {
+            $this->markTestSkipped('Serwer nie ma rozszerzenia GD — konwersja logo jest niedostępna.');
+        }
+
+        $path = InvoiceLogo::store(UploadedFile::fake()->image('logo.gif', 1481, 467));
+
+        $this->assertStringEndsWith('.jpg', $path);
+        $this->assertStringStartsWith("\xFF\xD8", Storage::disk('local')->get($path));
+    }
+
+    public function test_without_a_file_the_settings_keep_the_previous_logo(): void
+    {
+        InvoiceSetting::current()->update(['logo_path' => 'invoice-logo/logo.jpg']);
+
+        $this->post(route('invoice-settings.update'), [
+            'seller_name' => 'ASCOMM Adrian Sajnaga',
+            'seller_nip' => '8792451081',
+            'seller_address_l1' => 'ul. Konstytucji 3 Maja 15/12',
+            'seller_address_l2' => '87-100 Toruń',
+            'payment_days' => 7,
+            'vat_rate' => 23,
+            'line_description' => 'Czynsz {miesiac} {rok}',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('invoice-logo/logo.jpg', InvoiceSetting::current()->fresh()->logo_path);
+    }
+
+    /** Najmniejszy poprawny JPEG — testy nie potrzebują prawdziwego znaku firmowego. */
+    private function jpeg(): string
+    {
+        return base64_decode(
+            '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
+            .'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPDIzNP/AABEIAAEAAQMBIgACEQEDEQH/xABfAAAB'
+            .'BQEBAQEBAQAAAAAAAAADAQIEBQAGBwgJCgsBAAMBAQEBAQEBAQEAAAAAAAABAgMEBQYHCAkKCxAA'
+            .'AQIDBAUGBwgJCgsRAAECAwQFBgcICQoLEgABAgMEBQYHCAkKCxP/2gAMAwEAAhEDEQA/AJQA/9k='
+        );
     }
 }
