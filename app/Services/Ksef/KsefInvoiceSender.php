@@ -4,6 +4,7 @@ namespace App\Services\Ksef;
 
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
+use App\Models\KsefSetting;
 
 /**
  * Wysyłka faktury do KSeF sesją interaktywną.
@@ -71,6 +72,7 @@ class KsefInvoiceSender
             'status' => InvoiceStatus::Sent,
             'ksef_number' => $status['ksefNumber'] ?? null,
             'ksef_reference' => $reference,
+            'ksef_environment' => KsefSetting::current()->environment,
             'ksef_sent_at' => now(),
             'ksef_error' => null,
             'xml' => $xml,

@@ -210,7 +210,9 @@ class InvoiceController extends Controller
         $url = $invoice->goesToKsef() ? $qr->url($invoice) : null;
 
         // Jeden szablon obsługuje oba dokumenty — różnią się kolumną VAT i wystawcą.
-        $environment = \App\Models\KsefSetting::current()->environment;
+        // Adnotacja opisuje środowisko tej faktury, a nie bieżące ustawienie —
+        // po przełączeniu na produkcję stara wizualizacja nadal ma mówić prawdę.
+        $environment = $invoice->ksef_environment ?? \App\Models\KsefSetting::current()->environment;
 
         return Pdf::loadView('pdf.invoice', [
             'invoice' => $invoice,

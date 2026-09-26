@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\DocumentType;
+use App\Enums\KsefEnvironment;
 use App\Enums\InvoiceStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,7 @@ class Invoice extends Model
         'status',
         'ksef_number',
         'ksef_reference',
+        'ksef_environment',
         'ksef_sent_at',
         'ksef_error',
         'emailed_at',
@@ -45,6 +47,7 @@ class Invoice extends Model
             'total_gross' => 'decimal:2',
             'document_type' => DocumentType::class,
             'status' => InvoiceStatus::class,
+            'ksef_environment' => KsefEnvironment::class,
             'ksef_sent_at' => 'datetime',
             'emailed_at' => 'datetime',
         ];
@@ -73,6 +76,12 @@ class Invoice extends Model
     public function isInKsef(): bool
     {
         return filled($this->ksef_number);
+    }
+
+    /** Dokument z KSeF nieprodukcyjnego — ćwiczebny, bez mocy prawnej. */
+    public function isFromTestKsef(): bool
+    {
+        return $this->ksef_environment !== null && ! $this->ksef_environment->isProduction();
     }
 
     public function wasEmailed(): bool

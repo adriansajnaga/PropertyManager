@@ -32,7 +32,7 @@
         .b { font-weight: bold; }
         .party { border: .5pt solid #999; padding: 2.5mm; }
         .party .label { font-size: 7.5pt; color: #666; }
-        .totals td { border: .5pt solid #111; padding: 1.4mm 1.8mm; }
+        .totals td { border: .5pt solid #999; padding: 1.6mm 3mm; }
         .totals .grand { background: #f1f1f1; font-weight: bold; font-size: 10pt; }
         .ksef { border: .5pt solid #999; padding: 2mm; }
         /* Podpisy i stopka w jednym bloku przy dolnej krawędzi pierwszej strony. */
@@ -43,10 +43,13 @@
         .page-number:after { content: counter(page) " z {{ $qrUrl ? 2 : 1 }}"; }
         /* Strona weryfikacyjna odwzorowuje wizualizację z KSeF. */
         .verify { page-break-before: always; padding-top: 0; }
-        .verify .box { width: 118mm; }
+        .verify .box { width: 100%; }
         .verify h2 { font-size: 11pt; margin: 0 0 3.5mm; font-weight: normal; }
         .verify .hint { font-size: 7pt; color: #333; margin: 0 0 1.5mm; }
-        .verify .link { font-size: 7pt; word-break: break-all; color: #1d4ed8; }
+        /* Adres musi zmieścić się w jednej linii: złamany, trafia do PDF jako dwa
+           osobne napisy, a czytnik robi odsyłacz tylko z pierwszego z nich. */
+        .verify .link { font-size: 6.5pt; white-space: nowrap; margin-top: 2.5mm; }
+        .verify .link a { color: #1d4ed8; text-decoration: none; }
         .verify .ksef-number { font-size: 8.5pt; margin-top: 3mm; }
         .verify .made-in { font-size: 7pt; color: #333; margin-top: 1.5mm; }
         .verify .environment { text-align: center; font-size: 8pt; color: #777; margin-top: 55mm; }
@@ -112,7 +115,7 @@
             <th style="width: 18%">Forma płatności</th>
             <th style="width: 16%">Termin</th>
             <th>Płatność na konto</th>
-            <th style="width: 20%" class="num">Kwota przelewu</th>
+            <th style="width: 20%" class="ctr">Kwota przelewu</th>
         </tr>
     </thead>
     <tbody>
@@ -126,7 +129,7 @@
                     —
                 @endif
             </td>
-            <td class="num b">{{ $money($invoice->total_gross) }}</td>
+            <td class="ctr b">{{ $money($invoice->total_gross) }}</td>
         </tr>
     </tbody>
 </table>
@@ -152,11 +155,11 @@
                 <td>{{ $line->name }}</td>
                 <td class="ctr">{{ rtrim(rtrim(number_format((float) $line->quantity, 4, ',', ' '), '0'), ',') }}</td>
                 <td class="ctr">{{ $line->unit }}</td>
-                <td class="num">{{ $money($line->unit_price_net) }}</td>
+                <td class="ctr">{{ $money($line->unit_price_net) }}</td>
                 @unless ($isReceipt)
                     <td class="ctr">{{ (int) $line->vat_rate }}%</td>
                 @endunless
-                <td class="num">{{ $money($line->net) }}</td>
+                <td class="ctr">{{ $money($line->net) }}</td>
             </tr>
         @endforeach
     </tbody>
@@ -215,10 +218,11 @@
                             Nie możesz zeskanować kodu z obrazka? Kliknij w link weryfikacyjny
                             i przejdź do weryfikacji faktury!
                         </p>
-                        <div class="link">{{ $qrUrl }}</div>
                     </td>
                 </tr>
             </table>
+
+            <div class="link"><a href="{{ $qrUrl }}">{{ $qrUrl }}</a></div>
 
             <div class="ksef-number b">{{ $invoice->ksef_number }}</div>
 

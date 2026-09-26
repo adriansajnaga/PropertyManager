@@ -69,7 +69,12 @@
                     <flux:badge size="sm" :color="$invoice->status->color()">{{ $invoice->status->label() }}</flux:badge>
                 </x-detail>
                 <x-detail label="Numer KSeF" class="font-mono text-xs">{{ $invoice->ksef_number ?: '—' }}</x-detail>
-                <x-detail label="Wysłano do KSeF">{{ $invoice->ksef_sent_at?->format('d.m.Y, H:i') ?: '—' }}</x-detail>
+                <x-detail label="Wysłano do KSeF">
+                    {{ $invoice->ksef_sent_at?->format('d.m.Y, H:i') ?: '—' }}
+                    @if ($invoice->ksef_environment)
+                        <span class="block text-xs text-zinc-500">{{ $invoice->ksef_environment->label() }}</span>
+                    @endif
+                </x-detail>
                 <x-detail label="Wysłano najemcy">
                     @if ($invoice->wasEmailed())
                         {{ $invoice->emailed_at->format('d.m.Y, H:i') }}

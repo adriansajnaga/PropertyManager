@@ -26,7 +26,11 @@ class InvoiceQrCode
         }
 
         $nip = preg_replace('/\D+/', '', (string) InvoiceSetting::current()->seller_nip);
-        $environment = KsefSetting::current()->environment ?? KsefEnvironment::Test;
+        // Środowisko z chwili wysyłki — po przełączeniu ustawień na produkcję
+        // stara faktura nadal ma być sprawdzalna tam, gdzie ją przyjęto.
+        $environment = $invoice->ksef_environment
+            ?? KsefSetting::current()->environment
+            ?? KsefEnvironment::Test;
 
         return sprintf(
             '%s/invoice/%s/%s/%s',

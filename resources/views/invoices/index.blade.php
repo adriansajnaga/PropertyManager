@@ -105,6 +105,11 @@
                                         wysłana do najemcy
                                     </flux:badge>
                                 @endif
+                                @if ($invoice->isFromTestKsef())
+                                    <flux:badge size="sm" color="amber" :title="$invoice->ksef_environment->label()">
+                                        {{ $invoice->ksef_environment->value === 'demo' ? 'demo' : 'testowa' }}
+                                    </flux:badge>
+                                @endif
                             </div>
                         </flux:table.cell>
                         <flux:table.cell align="end">

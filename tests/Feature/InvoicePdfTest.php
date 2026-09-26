@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Enums\KsefEnvironment;
+use App\Models\Invoice;
 use App\Models\InvoiceSetting;
+use App\Models\KsefSetting;
 use App\Models\RentCharge;
 use App\Models\Unit;
 use App\Models\User;
@@ -141,12 +144,39 @@ class InvoicePdfTest extends TestCase
         $this->assertStringContainsString('8792451081-20260926-9132F5C00005-ED', $html);
         $this->assertStringContainsString('data:image/svg+xml;base64,', $html);
 
-        $this->get(route('invoices.pdf', $invoice))->assertOk();
+        // Adres musi być odsyłaczem, nie samym napisem — inaczej czytnik PDF
+        // (zwłaszcza na telefonie) robi odsyłacz z pierwszej linii i gubi resztę.
+        $this->assertStringContainsString('<a href="'.$url.'">'.$url.'</a>', $html);
+
+        $pdf = $this->get(route('invoices.pdf', $invoice))->assertOk()->getContent();
+
+        // W gotowym pliku odsyłacz jest jeden i prowadzi pod pełny adres.
+        $this->assertSame(1, substr_count($pdf, '/URI ('.$url.')'));
     }
 
     public function test_an_invoice_without_xml_has_no_verification_link(): void
     {
         $this->assertNull(app(InvoiceQrCode::class)->url($this->invoice()));
+    }
+
+    public function test_switching_to_production_does_not_move_old_invoices(): void
+    {
+        $this->fakeKsefSending();
+        $invoice = $this->invoice();
+        $this->post(route('invoices.send', $invoice));
+
+        $this->assertSame(KsefEnvironment::Test, $invoice->refresh()->ksef_environment);
+
+        // Przełączenie ustawień zmienia adres kolejnych wysyłek, nie historii.
+        KsefSetting::current()->update(['environment' => KsefEnvironment::Prod]);
+
+        $this->assertSame(1, Invoice::count());
+        $this->assertStringStartsWith(
+            'https://qr-test.ksef.mf.gov.pl/',
+            app(InvoiceQrCode::class)->url($invoice->refresh()),
+        );
+
+        $this->get(route('invoices.index'))->assertOk()->assertSee('testowa');
     }
 
     public function test_the_logo_lands_in_the_pdf_as_data(): void

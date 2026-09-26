@@ -4,6 +4,7 @@ namespace App\Services\Ksef;
 
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
+use App\Models\KsefSetting;
 use App\Models\RentCharge;
 use App\Models\Tenant;
 use Carbon\CarbonImmutable;
@@ -138,6 +139,7 @@ class KsefInvoiceImporter
                 'total_gross' => $gross,
                 'status' => InvoiceStatus::Imported,
                 'ksef_number' => $ksefNumber,
+                'ksef_environment' => KsefSetting::current()->environment,
                 'ksef_sent_at' => $issuedOn,
                 'xml' => $xml,
             ]);
