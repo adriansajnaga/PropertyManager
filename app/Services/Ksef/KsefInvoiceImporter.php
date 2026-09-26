@@ -21,6 +21,9 @@ class KsefInvoiceImporter
     /** Schemat FA(3) — wszystkie pola faktury żyją w tej przestrzeni nazw. */
     private const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
 
+    /** KSeF przyjmuje zapytania o zakres nie dłuższy niż 100 dni. */
+    private const MAX_RANGE_DAYS = 100;
+
     public function __construct(private readonly KsefClient $client) {}
 
     /**
@@ -30,6 +33,20 @@ class KsefInvoiceImporter
     {
         $tenants = $this->tenantsByNip();
         $summary = ['imported' => 0, 'known' => 0, 'foreign' => 0];
+
+        foreach ($this->windows($from, $to) as [$windowFrom, $windowTo]) {
+            $this->importWindow($windowFrom, $windowTo, $tenants, $summary);
+        }
+
+        return $summary;
+    }
+
+    /**
+     * @param  array<string, Tenant>  $tenants
+     * @param  array<string, int>  $summary
+     */
+    private function importWindow(CarbonInterface $from, CarbonInterface $to, array $tenants, array &$summary): void
+    {
         $offset = 0;
 
         do {
@@ -62,8 +79,26 @@ class KsefInvoiceImporter
 
             $offset += count($page['invoices']);
         } while ($page['hasMore'] && $page['invoices'] !== []);
+    }
 
-        return $summary;
+    /**
+     * Dzieli żądany okres na kawałki mieszczące się w limicie KSeF.
+     *
+     * @return array<int, array{0: CarbonImmutable, 1: CarbonImmutable}>
+     */
+    private function windows(CarbonInterface $from, CarbonInterface $to): array
+    {
+        $start = CarbonImmutable::parse($from);
+        $end = CarbonImmutable::parse($to);
+        $windows = [];
+
+        while ($start->lte($end)) {
+            $stop = $start->addDays(self::MAX_RANGE_DAYS - 1)->endOfDay();
+            $windows[] = [$start, $stop->gt($end) ? $end : $stop];
+            $start = $stop->addSecond();
+        }
+
+        return $windows;
     }
 
     private function store(string $ksefNumber, Tenant $tenant): Invoice
@@ -101,7 +136,7 @@ class KsefInvoiceImporter
                 'total_net' => $net,
                 'total_vat' => $vat,
                 'total_gross' => $gross,
-                'status' => InvoiceStatus::Sent,
+                'status' => InvoiceStatus::Imported,
                 'ksef_number' => $ksefNumber,
                 'ksef_sent_at' => $issuedOn,
                 'xml' => $xml,

@@ -46,10 +46,13 @@ class InvoiceController extends Controller
         ]);
     }
 
-    public function show(Invoice $invoice)
+    public function show(Invoice $invoice, InvoiceQrCode $qr)
     {
+        $invoice->load('lines', 'tenant', 'unit', 'rentCharge');
+
         return view('invoices.show', [
-            'invoice' => $invoice->load('lines', 'tenant', 'unit', 'rentCharge'),
+            'invoice' => $invoice,
+            'verificationUrl' => $qr->url($invoice),
         ]);
     }
 

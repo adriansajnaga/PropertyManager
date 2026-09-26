@@ -72,6 +72,19 @@
                 <x-detail label="Wysłano">{{ $invoice->ksef_sent_at?->format('d.m.Y, H:i') ?: '—' }}</x-detail>
             </dl>
 
+            @if ($verificationUrl)
+                <div class="mt-2">
+                    <flux:subheading>Weryfikacja w KSeF</flux:subheading>
+                    <flux:link :href="$verificationUrl" target="_blank" class="text-xs break-all">
+                        {{ $verificationUrl }}
+                    </flux:link>
+                    <flux:text class="mt-1 text-xs">
+                        Ten sam link kryje się w kodzie QR na PDF — otwiera stronę KSeF, która potwierdza,
+                        że faktura tam jest i nie została zmieniona.
+                    </flux:text>
+                </div>
+            @endif
+
             @if ($invoice->ksef_error)
                 <flux:callout variant="danger" icon="x-circle" :heading="$invoice->ksef_error" />
             @endif

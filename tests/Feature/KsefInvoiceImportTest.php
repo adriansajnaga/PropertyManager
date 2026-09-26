@@ -114,7 +114,7 @@ class KsefInvoiceImportTest extends TestCase
         $this->assertSame('1/9/2026', $invoice->number);
         $this->assertSame('8792451081-20260901-9132F5C00005-ED', $invoice->ksef_number);
         $this->assertSame($this->tenant->id, $invoice->tenant_id);
-        $this->assertSame(InvoiceStatus::Sent, $invoice->status);
+        $this->assertSame(InvoiceStatus::Imported, $invoice->status);
         $this->assertSame('1800.00', $invoice->total_net);
         $this->assertSame('414.00', $invoice->total_vat);
         $this->assertSame('2214.00', $invoice->total_gross);
@@ -132,6 +132,33 @@ class KsefInvoiceImportTest extends TestCase
         Http::assertSent(fn ($request) => str_contains($request->url(), '/invoices/query/metadata')
             && $request['subjectType'] === 'Subject1'
             && $request['dateRange']['dateType'] === 'Issue');
+    }
+
+    public function test_a_long_period_is_split_into_windows_that_ksef_accepts(): void
+    {
+        // KSeF przyjmuje zapytania o zakres nie dłuższy niż 100 dni.
+        $this->fakeKsef([]);
+
+        $this->post(route('invoices.import'), ['from' => '2026-01-01', 'to' => '2026-09-30'])
+            ->assertSessionHasNoErrors();
+
+        $ranges = [];
+
+        Http::recorded(function ($request) use (&$ranges) {
+            if (str_contains($request->url(), '/invoices/query/metadata')) {
+                $ranges[] = [$request['dateRange']['from'], $request['dateRange']['to']];
+            }
+        });
+
+        $this->assertGreaterThan(1, count($ranges), 'Dziewięć miesięcy nie mieści się w jednym zapytaniu.');
+
+        foreach ($ranges as [$from, $to]) {
+            $days = \Carbon\CarbonImmutable::parse($from)->diffInDays(\Carbon\CarbonImmutable::parse($to));
+            $this->assertLessThanOrEqual(100, ceil($days));
+        }
+
+        $this->assertSame('2026-01-01', substr($ranges[0][0], 0, 10));
+        $this->assertSame('2026-09-30', substr(end($ranges)[1], 0, 10));
     }
 
     public function test_invoices_of_companies_that_are_not_tenants_are_skipped(): void

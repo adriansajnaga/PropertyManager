@@ -333,10 +333,16 @@ class KsefClient
         if ($response->failed()) {
             $body = $response->json() ?? [];
 
-            $message = $body['exception']['exceptionDetailList'][0]['exceptionDescription']
-                ?? $body['exception']['exceptionDescription']
+            $details = collect($body['exception']['exceptionDetailList'] ?? [])
+                ->map(fn ($detail) => trim(($detail['exceptionDescription'] ?? '').' '.implode(' ', (array) ($detail['details'] ?? []))))
+                ->filter()
+                ->implode(' ');
+
+            $message = $details
+                ?: ($body['exception']['exceptionDescription']
                 ?? $body['message']
-                ?? 'HTTP '.$response->status();
+                ?? $body['title']
+                ?? 'HTTP '.$response->status());
 
             throw new KsefException('KSeF odrzucił żądanie: '.$message, $response->status());
         }
