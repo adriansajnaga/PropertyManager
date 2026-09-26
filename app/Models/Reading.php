@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\ReadingSyncService;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -91,6 +92,17 @@ class Reading extends Model
     public function isFromModule(): bool
     {
         return $this->source_table === self::SOURCE_MODULE;
+    }
+
+    /**
+     * Jednostka odczytu — bierzemy ją z licznika, a gdy odczyt jeszcze nie ma
+     * przypisania, z medium wskazanego przez źródło (nazwa tabeli albo parametr
+     * w linku kolektora). Bez tego zostaje sama liczba.
+     */
+    public function unit(): ?string
+    {
+        return $this->meter?->type->unit()
+            ?? ReadingSyncService::mediumOf($this->source_table)?->unit();
     }
 
     public function sourceLabel(): string

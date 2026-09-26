@@ -195,14 +195,14 @@
                     <span class="b">{{ $row->label }}</span>
                     <span class="xs muted">{{ $row->meter_model ? $row->meter_model.', ' : '' }}{{ $row->meter_serial }}</span>
                 </td>
-                <td class="num">{{ Format::reading($row->start_state, $row->consumption_unit) }}</td>
+                <td class="num">{{ Format::reading($row->start_state, $row->consumption_unit, true) }}</td>
                 <td class="num">
                     {{ $periodStart->format('d.m.Y') }}
                     @if ($row->start_interpolated)
                         <span class="xs muted">(wyliczony z {{ optional($row->start_date)->format('d.m.Y') }})</span>
                     @endif
                 </td>
-                <td class="num">{{ Format::reading($row->end_state, $row->consumption_unit) }}</td>
+                <td class="num">{{ Format::reading($row->end_state, $row->consumption_unit, true) }}</td>
                 <td class="num">
                     {{ $periodEnd->format('d.m.Y') }}
                     @if ($row->end_interpolated)

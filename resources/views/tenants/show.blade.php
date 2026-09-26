@@ -224,7 +224,7 @@
                         <div class="flex flex-wrap gap-2">
                             @foreach ($readings->take(20) as $reading)
                                 <flux:badge size="sm" color="zinc" class="tabular-nums">
-                                    {{ $reading->measuredAtLabel() }}: {{ number_format((float) $reading->consumption, 2, ',', ' ') }} {{ $meter->type->unit() }}
+                                    {{ $reading->measuredAtLabel() }}: {{ \App\Support\Format::reading($reading->consumption, $meter->type->unit(), true) }}
                                 </flux:badge>
                             @endforeach
                         </div>

@@ -76,7 +76,7 @@
                         <flux:table.row>
                             <flux:table.cell>{{ $reading->measuredAtLabel() }}</flux:table.cell>
                             <flux:table.cell align="end" class="tabular-nums">
-                                {{ number_format((float) $reading->consumption, 2, ',', ' ') }} {{ $meter->type->unit() }}
+                                {{ \App\Support\Format::reading($reading->consumption, $meter->type->unit(), true) }}
                             </flux:table.cell>
                             <flux:table.cell class="font-mono text-xs">{{ $reading->raw_hex ?: '—' }}</flux:table.cell>
                             <flux:table.cell>

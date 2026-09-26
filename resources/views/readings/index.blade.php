@@ -52,7 +52,7 @@
                             @endif
                         </flux:table.cell>
                         <flux:table.cell class="font-mono text-xs">{{ $reading->meter?->serial_number ?? $reading->source_meter_serial }}</flux:table.cell>
-                        <flux:table.cell align="end" class="tabular-nums">{{ number_format((float) $reading->consumption, 2, ',', ' ') }}</flux:table.cell>
+                        <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::reading($reading->consumption, $reading->unit(), true) }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:badge size="sm" :color="$reading->isManual() ? 'sky' : ($reading->isCalculated() ? 'purple' : 'zinc')">
                                 {{ $reading->sourceLabel() }}

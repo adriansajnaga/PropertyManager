@@ -71,7 +71,7 @@
                                     <flux:badge size="sm" color="amber">nieprzypisany {{ $reading->source_meter_serial }}</flux:badge>
                                 @endif
                             </flux:table.cell>
-                            <flux:table.cell align="end" class="tabular-nums">{{ number_format((float) $reading->consumption, 2, ',', ' ') }}</flux:table.cell>
+                            <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::reading($reading->consumption, $reading->unit(), true) }}</flux:table.cell>
                             <flux:table.cell>{{ $reading->measuredAtLabel() }}</flux:table.cell>
                         </flux:table.row>
                     @empty

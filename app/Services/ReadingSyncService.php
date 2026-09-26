@@ -160,7 +160,7 @@ class ReadingSyncService
             $medium = self::mediumOf($orphan->source_table);
 
             if ($medium !== null) {
-                $candidates = $candidates->filter(fn (Meter $meter) => $meter->type->value === $medium);
+                $candidates = $candidates->filter(fn (Meter $meter) => $meter->type === $medium);
             }
 
             // Dwa liczniki o tym samym numerze to zgadywanie — zostawiamy odczyt nieprzypisany.
@@ -182,13 +182,11 @@ class ReadingSyncService
      * (`modbus_electric_readings`) albo wprost medium (`electric`). Gdy nie mówi nic,
      * zwracamy null i o liczniku decyduje sam numer seryjny.
      */
-    private static function mediumOf(?string $source): ?string
+    public static function mediumOf(?string $source): ?MeterType
     {
         $source = trim((string) $source);
-        $media = array_map(fn (MeterType $type) => $type->value, MeterType::cases());
 
-        return config('pm.sync.tables')[$source]
-            ?? (in_array($source, $media, true) ? $source : null);
+        return MeterType::tryFrom(config('pm.sync.tables')[$source] ?? $source);
     }
 
     /** Numery bywają zapisane ze spacją albo małymi literami — to wciąż ten sam licznik. */

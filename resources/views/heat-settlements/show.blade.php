@@ -60,9 +60,9 @@
                     <flux:table.row>
                         <flux:table.cell variant="strong">{{ $line->meter_name }}</flux:table.cell>
                         <flux:table.cell class="font-mono text-xs">{{ $line->meter_serial }}</flux:table.cell>
-                        <flux:table.cell align="end" class="tabular-nums">{{ $line->start_reading !== null ? number_format((float) $line->start_reading, 4, ',', ' ') : '—' }}</flux:table.cell>
-                        <flux:table.cell align="end" class="tabular-nums">{{ $line->end_reading !== null ? number_format((float) $line->end_reading, 4, ',', ' ') : '—' }}</flux:table.cell>
-                        <flux:table.cell align="end" class="tabular-nums">{{ number_format((float) $line->gj_consumed, 4, ',', ' ') }}</flux:table.cell>
+                        <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::reading($line->start_reading, 'GJ', true) }}</flux:table.cell>
+                        <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::reading($line->end_reading, 'GJ', true) }}</flux:table.cell>
+                        <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::reading($line->gj_consumed, 'GJ', true) }}</flux:table.cell>
                     </flux:table.row>
                 @endforeach
             </flux:table.rows>

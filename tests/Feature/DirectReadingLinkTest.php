@@ -70,6 +70,29 @@ class DirectReadingLinkTest extends TestCase
         $this->assertSame($this->meter->id, Reading::find($id)->meter_id);
     }
 
+    public function test_the_lists_show_the_unit_next_to_the_reading(): void
+    {
+        $this->insertRaw();
+
+        // Jednostka i dokładność biorą się z medium licznika: prąd to kWh z jednym miejscem.
+        $this->get(route('readings.index'))->assertOk()->assertSee('1 234,6 kWh');
+        $this->get(route('overview'))->assertOk()->assertSee('1 234,6 kWh');
+    }
+
+    public function test_an_unlinked_reading_takes_its_unit_from_the_medium_in_the_source(): void
+    {
+        $id = $this->insertRaw([
+            'source_table' => 'water',
+            'source_meter_serial' => 'NIEZNANY',
+            'consumption' => 12.3456,
+        ]);
+
+        $this->assertNull(Reading::find($id)->meter_id);
+        $this->assertSame('m³', Reading::find($id)->unit());
+
+        $this->get(route('readings.index'))->assertOk()->assertSee('12,346 m³');
+    }
+
     public function test_the_command_links_them_for_the_scheduler(): void
     {
         $id = $this->insertRaw();

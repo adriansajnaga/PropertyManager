@@ -2,7 +2,7 @@
     $mediaLines = $lines->filter(fn ($line) => data_get($line, 'category') !== \App\Enums\SettlementLineCategory::MaintenanceCost);
     $costLines = $lines->filter(fn ($line) => data_get($line, 'category') === \App\Enums\SettlementLineCategory::MaintenanceCost);
     $money = fn ($value, $decimals = 2) => number_format((float) $value, $decimals, ',', ' ');
-    $reading = fn ($value, $line) => \App\Support\Format::reading($value, data_get($line, 'consumption_unit'));
+    $reading = fn ($value, $line) => \App\Support\Format::reading($value, data_get($line, 'consumption_unit'), true);
 @endphp
 
 <flux:card>
@@ -39,7 +39,7 @@
                             <div class="text-xs font-normal text-zinc-500 dark:text-zinc-400">
                                 @if (data_get($line, $side.'_interpolated'))
                                     wyliczony na {{ $boundary->format('d.m.Y') }}<br>
-                                    z odczytu {{ \App\Support\Format::reading($readingValue, data_get($line, 'consumption_unit')) }} z {{ \Carbon\Carbon::parse($date)->format('d.m.Y') }}
+                                    z odczytu {{ \App\Support\Format::reading($readingValue, data_get($line, 'consumption_unit'), true) }} z {{ \Carbon\Carbon::parse($date)->format('d.m.Y') }}
                                 @elseif ($date)
                                     z odczytu {{ \Carbon\Carbon::parse($date)->format('d.m.Y') }}
                                 @else
@@ -48,7 +48,7 @@
                             </div>
                         </flux:table.cell>
                     @endforeach
-                    <flux:table.cell align="end" class="tabular-nums">{{ $reading(data_get($line, 'consumption'), $line) }} {{ data_get($line, 'consumption_unit') }}</flux:table.cell>
+                    <flux:table.cell align="end" class="tabular-nums">{{ $reading(data_get($line, 'consumption'), $line) }}</flux:table.cell>
                     <flux:table.cell align="end" class="tabular-nums">
                         <div>{{ \App\Support\Format::price(data_get($line, 'unit_price'), data_get($line, 'consumption_unit')) }} zł</div>
                         <div class="text-xs text-zinc-500 dark:text-zinc-400">{{ data_get($line, 'invoice_number') ?: 'bez faktury' }}</div>
