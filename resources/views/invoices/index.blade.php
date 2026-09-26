@@ -59,8 +59,13 @@
                             <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::money($charge->amount) }} zł</flux:table.cell>
                             <flux:table.cell align="end">
                                 <flux:button size="sm" icon="document-plus"
-                                    :href="route('invoices.create', ['rent_charge_id' => $charge->id])">
-                                    Wystaw fakturę
+                                    :href="route('invoices.create', ['rent_charge_id' => $charge->id, 'document_type' => 'invoice'])">
+                                    Faktura
+                                </flux:button>
+                                <flux:button size="sm" icon="receipt-percent"
+                                    :href="route('invoices.create', ['rent_charge_id' => $charge->id, 'document_type' => 'receipt'])"
+                                    tooltip="Rachunek imienny — bez VAT, bez KSeF">
+                                    Rachunek
                                 </flux:button>
                             </flux:table.cell>
                         </flux:table.row>
@@ -76,6 +81,7 @@
         <flux:table class="mt-2">
             <flux:table.columns>
                 <flux:table.column>Numer</flux:table.column>
+                <flux:table.column>Rodzaj</flux:table.column>
                 <flux:table.column>Data</flux:table.column>
                 <flux:table.column>Nabywca</flux:table.column>
                 <flux:table.column>Lokal</flux:table.column>
@@ -89,6 +95,11 @@
                     <flux:table.row>
                         <flux:table.cell variant="strong">
                             <flux:link :href="route('invoices.show', $invoice)">{{ $invoice->number }}</flux:link>
+                        </flux:table.cell>
+                        <flux:table.cell>
+                            <flux:badge size="sm" :color="$invoice->isReceipt() ? 'amber' : 'zinc'">
+                                {{ $invoice->document_type->label() }}
+                            </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>{{ $invoice->issued_on->format('d.m.Y') }}</flux:table.cell>
                         <flux:table.cell>{{ $invoice->tenant?->name ?? '—' }}</flux:table.cell>
@@ -109,7 +120,7 @@
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="8">Brak faktur w {{ $year }}.</flux:table.cell>
+                        <flux:table.cell colspan="9">Brak dokumentów w {{ $year }}.</flux:table.cell>
                     </flux:table.row>
                 @endforelse
             </flux:table.rows>

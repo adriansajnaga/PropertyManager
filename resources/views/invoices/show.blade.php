@@ -1,18 +1,18 @@
 @extends('layouts.app')
 
-@section('title', 'Faktura '.$invoice->number)
-@section('heading', 'Faktura '.$invoice->number)
+@section('title', $invoice->title())
+@section('heading', $invoice->title())
 @section('subheading', 'Wystawiona '.$invoice->issued_on->format('d.m.Y').' · termin płatności '.$invoice->due_on->format('d.m.Y'))
 
 @section('actions')
     <flux:button icon="document-arrow-down" :href="route('invoices.pdf', $invoice)">PDF</flux:button>
 
-    @unless ($invoice->isInKsef())
+    @if ($invoice->goesToKsef() && ! $invoice->isInKsef())
         <form method="POST" action="{{ route('invoices.send', $invoice) }}" class="inline">
             @csrf
             <flux:button type="submit" variant="primary" icon="paper-airplane">Wyślij do KSeF</flux:button>
         </form>
-    @endunless
+    @endif
 
     @unless ($invoice->isInKsef())
         <x-delete-button :action="route('invoices.destroy', $invoice)" label="Usuń fakturę"
@@ -63,7 +63,7 @@
         </flux:card>
 
         <flux:card class="space-y-2">
-            <flux:heading size="lg">KSeF</flux:heading>
+            <flux:heading size="lg">{{ $invoice->goesToKsef() ? 'KSeF' : 'Rachunek' }}</flux:heading>
             <dl class="divide-y divide-zinc-100 text-sm dark:divide-white/10">
                 <x-detail label="Status">
                     <flux:badge size="sm" :color="$invoice->status->color()">{{ $invoice->status->label() }}</flux:badge>
@@ -90,6 +90,30 @@
             @endif
         </flux:card>
     </div>
+
+    <flux:card>
+        <flux:heading size="lg">Wyślij {{ $invoice->isReceipt() ? 'rachunek' : 'fakturę' }} najemcy</flux:heading>
+        <flux:subheading>PDF trafi do wiadomości jako załącznik.</flux:subheading>
+
+        <form method="POST" action="{{ route('invoices.email', $invoice) }}" class="mt-3 space-y-4">
+            @csrf
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <flux:input name="email" type="email" label="Adres e-mail" required
+                    :description="$invoice->tenant?->email ? 'Adres z kartoteki najemcy.' : 'Najemca nie ma zapisanego adresu — uzupełnij go w kartotece.'"
+                    :value="old('email', $invoice->tenant?->email ?? auth()->user()->email)" />
+
+                <flux:input name="subject" label="Temat" required
+                    :value="old('subject', \App\Mail\InvoiceMail::defaultSubject($invoice))" />
+            </div>
+
+            <flux:textarea name="body" label="Treść wiadomości" rows="5" required
+                description="Pod treścią automatycznie dopisywane są dane dokumentu i kwota."
+            >{{ old('body', \App\Mail\InvoiceMail::defaultBody($invoice)) }}</flux:textarea>
+
+            <flux:button type="submit" variant="primary" icon="paper-airplane">Wyślij</flux:button>
+        </form>
+    </flux:card>
 
     <flux:card>
         <flux:heading size="lg">Pozycje</flux:heading>

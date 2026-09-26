@@ -2,6 +2,7 @@
 
 namespace App\Services\Ksef;
 
+use App\Enums\DocumentType;
 use App\Models\Invoice;
 use App\Models\KsefSetting;
 use Carbon\CarbonImmutable;
@@ -20,13 +21,14 @@ class InvoiceNumbering
     /**
      * @return array{number: string, highest: int, warning: ?string}
      */
-    public function next(CarbonInterface $issuedOn): array
+    public function next(CarbonInterface $issuedOn, DocumentType $type = DocumentType::Invoice): array
     {
         $month = CarbonImmutable::parse($issuedOn);
         $warning = null;
-        $highest = $this->highestLocally($month);
+        $highest = $this->highestLocally($month, $type);
 
-        if (KsefSetting::current()->isConfigured()) {
+        // Rachunki są tylko w aplikacji, więc ich numeracji KSeF nie zna.
+        if ($type->goesToKsef() && KsefSetting::current()->isConfigured()) {
             try {
                 $highest = max($highest, $this->highestInKsef($month));
             } catch (Throwable $e) {
@@ -42,9 +44,10 @@ class InvoiceNumbering
         ];
     }
 
-    private function highestLocally(CarbonImmutable $month): int
+    private function highestLocally(CarbonImmutable $month, DocumentType $type): int
     {
         return Invoice::query()
+            ->where('document_type', $type)
             ->whereYear('issued_on', $month->year)
             ->whereMonth('issued_on', $month->month)
             ->pluck('number')

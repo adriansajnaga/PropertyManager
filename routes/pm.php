@@ -64,6 +64,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('invoices/import', [InvoiceController::class, 'import'])->name('invoices.import');
     Route::post('invoices/{invoice}/send', [InvoiceController::class, 'send'])->name('invoices.send');
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+    Route::post('invoices/{invoice}/email', [InvoiceController::class, 'email'])->name('invoices.email');
 
     Route::resource('rent-charges', RentChargeController::class)->except('show');
     Route::post('rent-charges/{rentCharge}/paid', [RentChargeController::class, 'togglePaid'])->name('rent-charges.paid');

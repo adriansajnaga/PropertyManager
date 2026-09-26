@@ -17,6 +17,7 @@ class InvoiceSettingController extends Controller
         $data = $request->validate([
             'seller_name' => ['required', 'string', 'max:255'],
             'seller_nip' => ['required', 'string', 'max:20'],
+            'seller_regon' => ['nullable', 'string', 'max:20'],
             'seller_address_l1' => ['required', 'string', 'max:255'],
             'seller_address_l2' => ['required', 'string', 'max:255'],
             'seller_phone' => ['nullable', 'string', 'max:32'],
@@ -27,6 +28,11 @@ class InvoiceSettingController extends Controller
             'vat_rate' => ['required', 'numeric', 'min:0', 'max:100'],
             'rent_is_gross' => ['boolean'],
             'line_description' => ['required', 'string', 'max:255'],
+            'receipt_issuer_name' => ['nullable', 'string', 'max:255'],
+            'receipt_address_l1' => ['nullable', 'string', 'max:255'],
+            'receipt_address_l2' => ['nullable', 'string', 'max:255'],
+            'receipt_identifier' => ['nullable', 'string', 'max:64'],
+            'receipt_note' => ['nullable', 'string', 'max:255'],
         ], [], [
             'seller_name' => 'nazwa sprzedawcy',
             'seller_nip' => 'NIP sprzedawcy',

@@ -1,104 +1,127 @@
 @php
     use App\Support\Format;
 
-    $money = fn ($value) => Format::money($value);
+    $money = fn ($value) => Format::money($value).' zł';
+    $date = fn ($value) => $value?->format('Y.m.d');
     $tenant = $invoice->tenant;
+    $isReceipt = $invoice->isReceipt();
+
+    // Rachunek wystawia osoba fizyczna, faktura — firma.
+    $issuer = $isReceipt
+        ? ['name' => $settings->receipt_issuer_name, 'l1' => $settings->receipt_address_l1, 'l2' => $settings->receipt_address_l2, 'id' => $settings->receipt_identifier]
+        : ['name' => $settings->seller_name, 'l1' => $settings->seller_address_l1, 'l2' => $settings->seller_address_l2, 'id' => 'NIP: '.$settings->seller_nip];
 @endphp
 <!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="utf-8">
-    <title>Faktura {{ $invoice->number }}</title>
+    <title>{{ $invoice->title() }}</title>
     <style>
-        @page { margin: 12mm 10mm 14mm; }
-        body { font-family: DejaVu Sans, sans-serif; font-size: 8pt; color: #111; line-height: 1.35; }
-        h1 { font-size: 13pt; margin: 0 0 1mm; }
-        h2 { font-size: 8pt; margin: 4mm 0 1.5mm; text-transform: uppercase; color: #333; border-bottom: .5pt solid #999; padding-bottom: .5mm; }
+        @page { margin: 12mm 11mm 16mm; }
+        body { font-family: DejaVu Sans, sans-serif; font-size: 8.5pt; color: #111; line-height: 1.35; }
+        h1 { font-size: 15pt; margin: 0; letter-spacing: .4pt; }
         table { width: 100%; border-collapse: collapse; }
-        table.data th, table.data td { border: .5pt solid #999; padding: 1mm 1.5mm; }
-        table.data th { background: #ececec; text-align: left; font-size: 7pt; }
-        table.plain td { padding: .5mm 0; vertical-align: top; }
+        table.plain td { padding: .4mm 0; vertical-align: top; }
+        table.grid th, table.grid td { border: .5pt solid #999; padding: 1.2mm 1.5mm; }
+        table.grid th { background: #f1f1f1; font-size: 7.5pt; text-align: left; font-weight: bold; }
         .num { text-align: right; }
         .ctr { text-align: center; }
         .muted { color: #666; }
-        .xs { font-size: 7pt; }
+        .xs { font-size: 7.5pt; }
         .b { font-weight: bold; }
-        .head { border: .5pt solid #111; padding: 2.5mm; margin-bottom: 3mm; }
-        .box { border: .5pt solid #999; padding: 2mm; }
-        .sum td { border: .5pt solid #111; padding: 1.2mm 1.5mm; }
-        .grand { background: #ececec; font-weight: bold; }
-        .qr { text-align: center; margin-top: 4mm; }
-        .bottom { position: fixed; bottom: 0; left: 0; right: 0; font-size: 6.5pt; color: #666; }
+        .party { border: .5pt solid #999; padding: 2mm; height: 22mm; }
+        .party .label { font-size: 7.5pt; color: #666; }
+        .totals td { border: .5pt solid #111; padding: 1.4mm 1.8mm; }
+        .totals .grand { background: #f1f1f1; font-weight: bold; font-size: 10pt; }
+        .sign { margin-top: 12mm; font-size: 7pt; color: #444; }
+        .sign td { text-align: center; padding-top: 10mm; }
+        .sign .line { border-top: .5pt dotted #777; margin-bottom: 1mm; }
+        .ksef { border: .5pt solid #999; padding: 2mm; }
+        .footer { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 6.5pt; color: #666; border-top: .5pt solid #ddd; padding-top: 1mm; }
     </style>
 </head>
 <body>
 
-<div class="head">
-    <table class="plain">
-        <tr>
-            <td style="width: 60%">
-                <h1>Faktura {{ $invoice->number }}</h1>
-                <span class="xs muted">Faktura podstawowa · {{ $invoice->status->label() }}</span>
-            </td>
-            <td style="width: 40%" class="num">
-                @if ($invoice->ksef_number)
-                    <span class="muted xs">Numer KSeF</span><br>
-                    <span class="b xs">{{ $invoice->ksef_number }}</span>
-                @else
-                    <span class="muted xs">Dokument nie został jeszcze wysłany do KSeF</span>
-                @endif
-            </td>
-        </tr>
-    </table>
-</div>
-
 <table class="plain">
     <tr>
-        <td style="width: 50%; padding-right: 3mm">
-            <div class="box">
-                <span class="muted xs">Sprzedawca</span><br>
-                <span class="b">{{ $settings->seller_name }}</span><br>
-                <span class="xs">{{ $settings->seller_address_l1 }}</span><br>
-                <span class="xs">{{ $settings->seller_address_l2 }}</span><br>
-                <span class="xs">NIP {{ $settings->seller_nip }}</span>
-                @if ($settings->seller_phone)
-                    <br><span class="xs">tel. {{ $settings->seller_phone }}</span>
-                @endif
+        <td style="width: 58%; padding-top: 2mm">
+            <h1>{{ $isReceipt ? 'RACHUNEK' : 'FAKTURA VAT' }} {{ $invoice->number }}</h1>
+            <span class="xs muted">
+                {{ $invoice->document_type->title() }} za czynsz
+                @if ($settings->issue_place) · {{ $settings->issue_place }} @endif
+            </span>
+        </td>
+        <td style="width: 42%">
+            <table class="plain xs">
+                <tr><td class="muted">Data wystawienia:</td><td class="num b">{{ $date($invoice->issued_on) }}</td></tr>
+                <tr><td class="muted">Data sprzedaży:</td><td class="num b">{{ $date($invoice->sold_on) }}</td></tr>
+                <tr><td class="muted">Numer {{ $isReceipt ? 'rachunku' : 'faktury' }}:</td><td class="num b">{{ $invoice->number }}</td></tr>
+            </table>
+        </td>
+    </tr>
+</table>
+
+<table class="plain" style="margin-top: 3mm">
+    <tr>
+        <td style="width: 50%; padding-right: 2mm">
+            <div class="party">
+                <span class="label">{{ $isReceipt ? 'Wystawca:' : 'Sprzedawca:' }}</span><br>
+                <span class="b">{{ $issuer['name'] }}</span><br>
+                <span class="xs">{{ $issuer['l2'] }}</span><br>
+                <span class="xs">{{ $issuer['l1'] }}</span><br>
+                <span class="xs">{{ $issuer['id'] }}</span>
             </div>
         </td>
         <td style="width: 50%">
-            <div class="box">
-                <span class="muted xs">Nabywca</span><br>
+            <div class="party">
+                <span class="label">Nabywca:</span><br>
                 <span class="b">{{ $tenant?->name ?? '—' }}</span><br>
-                <span class="xs">{{ $tenant?->street }}</span><br>
-                <span class="xs">{{ trim(($tenant?->zip ?? '').' '.($tenant?->city ?? '')) }}</span><br>
-                <span class="xs">NIP {{ $tenant?->nip ?: '—' }}</span>
+                <span class="xs">{{ trim(($tenant?->street ?? '').', '.trim(($tenant?->zip ?? '').' '.($tenant?->city ?? '')), ', ') }}</span><br>
+                @if ($tenant?->nip)
+                    <span class="xs">NIP: {{ $tenant->nip }}</span>
+                @endif
             </div>
         </td>
     </tr>
 </table>
 
-<h2>Szczegóły</h2>
-
-<table class="plain xs">
-    <tr>
-        <td style="width: 34%">Data wystawienia: <span class="b">{{ $invoice->issued_on->format('d.m.Y') }}</span></td>
-        <td style="width: 33%">Data sprzedaży: <span class="b">{{ $invoice->sold_on->format('d.m.Y') }}</span></td>
-        <td style="width: 33%">Miejsce wystawienia: <span class="b">{{ $settings->issue_place ?: '—' }}</span></td>
-    </tr>
-</table>
-
-<h2>Pozycje</h2>
-
-<table class="data">
+<table class="grid" style="margin-top: 3mm">
     <thead>
         <tr>
-            <th style="width: 6%" class="ctr">Lp.</th>
-            <th>Nazwa towaru lub usługi</th>
-            <th style="width: 12%" class="ctr">Ilość</th>
+            <th style="width: 20%">Forma płatności</th>
+            <th style="width: 18%">Termin</th>
+            <th>Płatność na konto</th>
+            <th style="width: 20%" class="num">Kwota do zapłaty</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Przelew</td>
+            <td>{{ $date($invoice->due_on) }}</td>
+            <td class="xs">
+                @if ($settings->bank_account)
+                    @if ($settings->bank_swift){{ $settings->bank_swift }} — @endif{{ $settings->bank_account }}
+                @else
+                    —
+                @endif
+            </td>
+            <td class="num b">{{ $money($invoice->total_gross) }}</td>
+        </tr>
+    </tbody>
+</table>
+
+<table class="grid" style="margin-top: 3mm">
+    <thead>
+        <tr>
+            <th style="width: 7%" class="ctr">L.p.</th>
+            <th>Nazwa towaru / usługi</th>
+            <th style="width: 10%" class="ctr">Ilość</th>
+            <th style="width: 9%" class="ctr">J.m.</th>
             <th style="width: 15%" class="ctr">Cena netto</th>
-            <th style="width: 10%" class="ctr">Stawka</th>
-            <th style="width: 15%" class="ctr">Wartość netto</th>
+            @unless ($isReceipt)
+                <th style="width: 8%" class="ctr">VAT</th>
+            @endunless
+            <th style="width: 16%" class="ctr">Wartość netto</th>
         </tr>
     </thead>
     <tbody>
@@ -106,82 +129,81 @@
             <tr>
                 <td class="ctr">{{ $line->position }}</td>
                 <td>{{ $line->name }}</td>
-                <td class="ctr">{{ rtrim(rtrim(number_format((float) $line->quantity, 4, ',', ' '), '0'), ',') }} {{ $line->unit }}</td>
+                <td class="ctr">{{ rtrim(rtrim(number_format((float) $line->quantity, 4, ',', ' '), '0'), ',') }}</td>
+                <td class="ctr">{{ $line->unit }}</td>
                 <td class="num">{{ $money($line->unit_price_net) }}</td>
-                <td class="ctr">{{ (int) $line->vat_rate }}%</td>
+                @unless ($isReceipt)
+                    <td class="ctr">{{ (int) $line->vat_rate }}%</td>
+                @endunless
                 <td class="num">{{ $money($line->net) }}</td>
             </tr>
         @endforeach
     </tbody>
 </table>
 
-<h2>Podsumowanie stawek podatku</h2>
-
-<table class="data">
-    <thead>
-        <tr>
-            <th style="width: 40%" class="ctr">Stawka podatku</th>
-            <th class="ctr">Kwota netto</th>
-            <th class="ctr">Kwota podatku</th>
-            <th class="ctr">Kwota brutto</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td class="ctr">{{ (int) $invoice->vat_rate }}%</td>
-            <td class="num">{{ $money($invoice->total_net) }}</td>
-            <td class="num">{{ $money($invoice->total_vat) }}</td>
-            <td class="num">{{ $money($invoice->total_gross) }}</td>
-        </tr>
-    </tbody>
-</table>
-
-<table class="sum" style="margin-top: 2mm">
+<table class="plain" style="margin-top: 3mm">
     <tr>
-        <td style="width: 70%" class="muted">Kwota należności ogółem</td>
-        <td class="num grand">{{ $money($invoice->total_gross) }} PLN</td>
+        <td style="width: 52%; vertical-align: bottom">
+            @if ($qrUrl)
+                <div class="ksef">
+                    <table class="plain">
+                        <tr>
+                            <td style="width: 26mm">
+                                <img src="{{ $qrCode }}" alt="Kod QR KSeF" style="width: 24mm; height: 24mm">
+                            </td>
+                            <td class="xs">
+                                <span class="muted">Faktura w Krajowym Systemie e-Faktur</span><br>
+                                <span class="b">{{ $invoice->ksef_number }}</span><br>
+                                <span class="muted" style="word-break: break-all">{{ $qrUrl }}</span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            @elseif (! $isReceipt)
+                <span class="xs muted">Dokument nie został jeszcze wysłany do KSeF.</span>
+            @elseif ($settings->receipt_note)
+                <span class="xs muted">{{ $settings->receipt_note }}</span>
+            @endif
+        </td>
+        <td style="width: 48%">
+            <table class="totals">
+                <tr>
+                    <td class="muted">Razem netto</td>
+                    <td class="num">{{ $money($invoice->total_net) }}</td>
+                </tr>
+                @unless ($isReceipt)
+                    <tr>
+                        <td class="muted">Razem VAT {{ (int) $invoice->vat_rate }}%</td>
+                        <td class="num">{{ $money($invoice->total_vat) }}</td>
+                    </tr>
+                @endunless
+                <tr>
+                    <td class="grand">Do zapłaty</td>
+                    <td class="num grand">{{ $money($invoice->total_gross) }}</td>
+                </tr>
+            </table>
+        </td>
     </tr>
 </table>
 
-<h2>Płatność</h2>
-
-<table class="plain xs">
+<table class="sign">
     <tr>
-        <td style="width: 34%">Forma płatności: <span class="b">Przelew</span></td>
-        <td style="width: 33%">Termin płatności: <span class="b">{{ $invoice->due_on->format('d.m.Y') }}</span></td>
-        <td style="width: 33%">Waluta: <span class="b">PLN</span></td>
+        <td style="width: 45%">
+            <div class="line"></div>
+            Podpis osoby upoważnionej do wystawienia<br>{{ $isReceipt ? 'rachunku' : 'faktury' }} — {{ $issuer['name'] }}
+        </td>
+        <td style="width: 10%"></td>
+        <td style="width: 45%">
+            <div class="line"></div>
+            Podpis osoby upoważnionej do odbioru
+        </td>
     </tr>
-    @if ($settings->bank_account)
-        <tr>
-            <td colspan="3">
-                Numer rachunku: <span class="b">{{ $settings->bank_account }}</span>
-                @if ($settings->bank_swift)
-                    · SWIFT: <span class="b">{{ $settings->bank_swift }}</span>
-                @endif
-            </td>
-        </tr>
-    @endif
 </table>
 
-@if ($qrUrl)
-    <div class="qr">
-        <h2 style="text-align: left">Weryfikacja faktury w KSeF</h2>
-        <img src="{{ $qrCode }}" alt="Kod QR weryfikujący fakturę" style="width: 32mm; height: 32mm">
-        <div class="b xs">{{ $invoice->ksef_number ?: 'OFFLINE' }}</div>
-        <div class="xs muted" style="margin-top: 1mm">
-            Zeskanuj kod albo otwórz link, aby sprawdzić, czy faktura znajduje się w KSeF:
-        </div>
-        <div class="xs" style="word-break: break-all">{{ $qrUrl }}</div>
-    </div>
-@endif
-
-<div class="bottom">
-    <table class="plain">
-        <tr>
-            <td>{{ config('pm.report_issuer') }}</td>
-            <td class="num">Wygenerowano {{ now()->format('d.m.Y H:i') }}</td>
-        </tr>
-    </table>
+<div class="footer">
+    {{ $issuer['name'] }}@if (! $isReceipt && $settings->seller_nip) · NIP: {{ $settings->seller_nip }}@endif
+    @if (! $isReceipt && $settings->seller_regon) · REGON: {{ $settings->seller_regon }}@endif
+    · dokument wystawiony w {{ config('app.name') }}
 </div>
 
 </body>

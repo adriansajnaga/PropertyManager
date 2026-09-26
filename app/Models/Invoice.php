@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,6 +12,7 @@ class Invoice extends Model
 {
     protected $fillable = [
         'number',
+        'document_type',
         'tenant_id',
         'unit_id',
         'rent_charge_id',
@@ -39,6 +41,7 @@ class Invoice extends Model
             'total_net' => 'decimal:2',
             'total_vat' => 'decimal:2',
             'total_gross' => 'decimal:2',
+            'document_type' => DocumentType::class,
             'status' => InvoiceStatus::class,
             'ksef_sent_at' => 'datetime',
         ];
@@ -67,5 +70,21 @@ class Invoice extends Model
     public function isInKsef(): bool
     {
         return filled($this->ksef_number);
+    }
+
+    public function isReceipt(): bool
+    {
+        return $this->document_type === DocumentType::Receipt;
+    }
+
+    /** Rachunek nie ma czego szukać w KSeF. */
+    public function goesToKsef(): bool
+    {
+        return ($this->document_type ?? DocumentType::Invoice)->goesToKsef();
+    }
+
+    public function title(): string
+    {
+        return ($this->document_type ?? DocumentType::Invoice)->title().' '.$this->number;
     }
 }

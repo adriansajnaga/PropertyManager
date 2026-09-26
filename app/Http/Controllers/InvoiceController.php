@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\DocumentType;
+use App\Mail\InvoiceMail;
 use App\Models\Invoice;
 use App\Models\InvoiceSetting;
 use App\Models\RentCharge;
@@ -14,6 +16,8 @@ use App\Services\RentInvoiceFactory;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use RuntimeException;
 use Throwable;
 
@@ -60,37 +64,46 @@ class InvoiceController extends Controller
     public function create(Request $request, RentInvoiceFactory $factory)
     {
         $charge = RentCharge::with('tenant', 'unit')->findOrFail($request->integer('rent_charge_id'));
+        $type = DocumentType::tryFrom((string) $request->query('document_type')) ?? DocumentType::Invoice;
 
         try {
-            $draft = $factory->draft($charge);
+            $draft = $factory->draft($charge, null, $type);
         } catch (RuntimeException $e) {
             return redirect()->route('invoices.index')->withErrors(['invoice' => $e->getMessage()]);
         }
 
-        return view('invoices.create', ['charge' => $charge, 'draft' => $draft]);
+        return view('invoices.create', ['charge' => $charge, 'draft' => $draft, 'type' => $type]);
     }
 
     public function store(Request $request, RentInvoiceFactory $factory)
     {
         $data = $request->validate([
             'rent_charge_id' => ['nullable', 'exists:rent_charges,id'],
-            'number' => ['required', 'string', 'max:64', 'unique:invoices,number'],
+            'document_type' => ['required', Rule::enum(DocumentType::class)],
+            // Numer musi być wolny w obrębie swojej serii — faktur albo rachunków.
+            'number' => [
+                'required', 'string', 'max:64',
+                Rule::unique('invoices', 'number')->where('document_type', $request->input('document_type')),
+            ],
             'issued_on' => ['required', 'date'],
             'sold_on' => ['required', 'date'],
             'due_on' => ['required', 'date', 'after_or_equal:issued_on'],
-            'line_name' => ['required', 'string', 'max:255'],
-            'unit' => ['required', 'string', 'max:20'],
-            'quantity' => ['required', 'numeric', 'min:0.0001'],
-            'unit_price_net' => ['required', 'numeric', 'min:0'],
             'vat_rate' => ['required', 'numeric', 'min:0', 'max:100'],
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.name' => ['required', 'string', 'max:255'],
+            'lines.*.unit' => ['required', 'string', 'max:20'],
+            'lines.*.quantity' => ['required', 'numeric', 'min:0.0001'],
+            'lines.*.unit_price_net' => ['required', 'numeric', 'min:0'],
         ], [], [
             'number' => 'numer faktury',
             'issued_on' => 'data wystawienia',
             'sold_on' => 'data sprzedaży',
             'due_on' => 'termin płatności',
-            'line_name' => 'nazwa pozycji',
-            'unit_price_net' => 'cena netto',
             'vat_rate' => 'stawka VAT',
+            'lines' => 'pozycje',
+            'lines.*.name' => 'nazwa pozycji',
+            'lines.*.quantity' => 'ilość',
+            'lines.*.unit_price_net' => 'cena netto',
         ]);
 
         try {
@@ -106,6 +119,10 @@ class InvoiceController extends Controller
     /** Wysyłka faktury do KSeF sesją interaktywną. */
     public function send(Invoice $invoice, KsefInvoiceSender $sender)
     {
+        if (! $invoice->goesToKsef()) {
+            return back()->withErrors(['invoice' => 'Rachunek nie jest wysyłany do KSeF — zostaje w aplikacji.']);
+        }
+
         try {
             $invoice = KsefClient::wrapConnectionErrors(fn () => $sender->send($invoice));
         } catch (KsefException $e) {
@@ -151,15 +168,54 @@ class InvoiceController extends Controller
     /** Wizualizacja faktury w PDF, z kodem QR weryfikującym ją w KSeF. */
     public function pdf(Invoice $invoice, InvoiceQrCode $qr)
     {
-        $invoice->load('lines', 'tenant', 'unit');
-        $url = $qr->url($invoice);
+        return $this->pdfFor($invoice, $qr)
+            ->download(InvoiceSetting::current()->documentFileName($invoice));
+    }
 
+    /** Wysłanie dokumentu najemcy e-mailem, z PDF-em w załączniku. */
+    public function email(Request $request, Invoice $invoice, InvoiceQrCode $qr)
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email'],
+            'subject' => ['required', 'string', 'max:255'],
+            'body' => ['required', 'string', 'max:5000'],
+        ], [], [
+            'email' => 'adres e-mail',
+            'subject' => 'temat',
+            'body' => 'treść wiadomości',
+        ]);
+
+        $filename = InvoiceSetting::current()->documentFileName($invoice);
+
+        try {
+            Mail::to($data['email'])->send(new InvoiceMail(
+                $invoice,
+                $this->pdfFor($invoice, $qr)->output(),
+                $filename,
+                $data['body'],
+                $data['subject'],
+            ));
+        } catch (Throwable $e) {
+            report($e);
+
+            return back()->withErrors(['email' => 'Nie udało się wysłać: '.$e->getMessage()]);
+        }
+
+        return back()->with('status', "{$invoice->title()} wysłana na adres {$data['email']}.");
+    }
+
+    private function pdfFor(Invoice $invoice, InvoiceQrCode $qr)
+    {
+        $invoice->load('lines', 'tenant', 'unit');
+        $url = $invoice->goesToKsef() ? $qr->url($invoice) : null;
+
+        // Jeden szablon obsługuje oba dokumenty — różnią się kolumną VAT i wystawcą.
         return Pdf::loadView('pdf.invoice', [
             'invoice' => $invoice,
             'settings' => InvoiceSetting::current(),
             'qrUrl' => $url,
             'qrCode' => $url ? $qr->dataUri($url) : null,
-        ])->setPaper('a4')->download('faktura-'.str($invoice->number)->slug().'.pdf');
+        ])->setPaper('a4');
     }
 
     public function destroy(Invoice $invoice)

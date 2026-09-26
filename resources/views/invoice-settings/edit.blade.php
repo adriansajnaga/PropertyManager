@@ -17,6 +17,10 @@
             <div class="grid gap-6 sm:grid-cols-2">
                 <flux:input name="seller_name" label="Nazwa" :value="old('seller_name', $settings->seller_name)" required />
                 <flux:input name="seller_nip" label="NIP" :value="old('seller_nip', $settings->seller_nip)" required />
+
+                <flux:input name="seller_regon" label="REGON" badge="opcjonalnie"
+                    description="Pojawia się w stopce faktury."
+                    :value="old('seller_regon', $settings->seller_regon)" />
                 <flux:input name="seller_address_l1" label="Ulica i numer" placeholder="ul. Przykładowa 1/2"
                     :value="old('seller_address_l1', $settings->seller_address_l1)" required />
                 <flux:input name="seller_address_l2" label="Kod pocztowy i miejscowość" placeholder="00-000 Miasto"
@@ -61,6 +65,35 @@
             <x-checkbox name="rent_is_gross" label="Stawka czynszu w kartotece lokalu jest kwotą brutto"
                 description="Zaznaczone: 2 214 zł to kwota do zapłaty, a netto (1 800 zł) wyliczamy wstecz. Odznaczone: 2 214 zł to netto, VAT doliczamy."
                 :checked="old('rent_is_gross', $settings->rent_is_gross ?? true)" />
+
+            <flux:separator variant="subtle" />
+
+            <div>
+                <flux:heading>Rachunki imienne</flux:heading>
+                <flux:subheading>
+                    Dane wystawcy używane, gdy zamiast faktury wystawiasz rachunek — na przykład
+                    w okresie zawieszenia działalności. Rachunek nie idzie do KSeF i nie ma stawki VAT.
+                </flux:subheading>
+            </div>
+
+            <div class="grid gap-6 sm:grid-cols-2">
+                <flux:input name="receipt_issuer_name" label="Wystawca (imię i nazwisko)"
+                    :value="old('receipt_issuer_name', $settings->receipt_issuer_name)" />
+
+                <flux:input name="receipt_identifier" label="Identyfikator" badge="opcjonalnie"
+                    description="Numer NIP albo PESEL, jeśli ma znaleźć się na rachunku."
+                    :value="old('receipt_identifier', $settings->receipt_identifier)" />
+
+                <flux:input name="receipt_address_l1" label="Ulica i numer"
+                    :value="old('receipt_address_l1', $settings->receipt_address_l1)" />
+
+                <flux:input name="receipt_address_l2" label="Kod pocztowy i miejscowość"
+                    :value="old('receipt_address_l2', $settings->receipt_address_l2)" />
+            </div>
+
+            <flux:input name="receipt_note" label="Adnotacja na rachunku" badge="opcjonalnie"
+                placeholder="np. Zwolnienie z VAT — działalność zawieszona"
+                :value="old('receipt_note', $settings->receipt_note)" />
 
             <x-form-actions :cancel="route('invoices.index')" />
         </form>

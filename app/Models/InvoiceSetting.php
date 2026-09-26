@@ -9,6 +9,7 @@ class InvoiceSetting extends Model
     protected $fillable = [
         'seller_name',
         'seller_nip',
+        'seller_regon',
         'seller_address_l1',
         'seller_address_l2',
         'seller_phone',
@@ -19,6 +20,11 @@ class InvoiceSetting extends Model
         'vat_rate',
         'rent_is_gross',
         'line_description',
+        'receipt_issuer_name',
+        'receipt_address_l1',
+        'receipt_address_l2',
+        'receipt_identifier',
+        'receipt_note',
     ];
 
     protected function casts(): array
@@ -38,6 +44,27 @@ class InvoiceSetting extends Model
     public function isConfigured(): bool
     {
         return filled($this->seller_name) && filled($this->seller_nip);
+    }
+
+    /**
+     * Nazwa pliku PDF w konwencji używanej dotąd: „2026_3_2 ASCOMM.pdf" —
+     * rok, numer kolejny, miesiąc i skrót wystawcy.
+     */
+    public function documentFileName(\App\Models\Invoice $invoice): string
+    {
+        $brand = str($this->seller_name ?: config('pm.brand_owner'))->before(' ')->upper();
+
+        if (preg_match('#^(\d+)/(\d+)/(\d{4})$#', (string) $invoice->number, $parts)) {
+            return sprintf('%s_%s_%s %s.pdf', $parts[3], $parts[1], $parts[2], $brand);
+        }
+
+        return str($invoice->document_type->label().'-'.$invoice->number)->slug().'.pdf';
+    }
+
+    /** Rachunek wystawiamy jako osoba fizyczna, więc ma osobne dane wystawcy. */
+    public function receiptIsConfigured(): bool
+    {
+        return filled($this->receipt_issuer_name);
     }
 
     /** Opis pozycji faktury za czynsz, np. „Czynsz wrzesień 2026". */
