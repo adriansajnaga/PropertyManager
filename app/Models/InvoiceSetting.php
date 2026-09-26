@@ -10,6 +10,7 @@ class InvoiceSetting extends Model
         'seller_name',
         'seller_nip',
         'seller_regon',
+        'logo_path',
         'seller_address_l1',
         'seller_address_l2',
         'seller_phone',
@@ -44,6 +45,20 @@ class InvoiceSetting extends Model
     public function isConfigured(): bool
     {
         return filled($this->seller_name) && filled($this->seller_nip);
+    }
+
+    /** Logo jako data URI — dompdf nie musi wtedy sięgać po plik z dysku. */
+    public function logoDataUri(): ?string
+    {
+        if (blank($this->logo_path) || ! \Illuminate\Support\Facades\Storage::disk('local')->exists($this->logo_path)) {
+            return null;
+        }
+
+        $contents = \Illuminate\Support\Facades\Storage::disk('local')->get($this->logo_path);
+        $mime = str($this->logo_path)->endsWith('.png') ? 'image/png'
+            : (str($this->logo_path)->endsWith('.svg') ? 'image/svg+xml' : 'image/jpeg');
+
+        return 'data:'.$mime.';base64,'.base64_encode($contents);
     }
 
     /**

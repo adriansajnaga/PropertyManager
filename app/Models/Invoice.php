@@ -28,6 +28,8 @@ class Invoice extends Model
         'ksef_reference',
         'ksef_sent_at',
         'ksef_error',
+        'emailed_at',
+        'emailed_to',
         'xml',
     ];
 
@@ -44,6 +46,7 @@ class Invoice extends Model
             'document_type' => DocumentType::class,
             'status' => InvoiceStatus::class,
             'ksef_sent_at' => 'datetime',
+            'emailed_at' => 'datetime',
         ];
     }
 
@@ -70,6 +73,11 @@ class Invoice extends Model
     public function isInKsef(): bool
     {
         return filled($this->ksef_number);
+    }
+
+    public function wasEmailed(): bool
+    {
+        return $this->emailed_at !== null;
     }
 
     public function isReceipt(): bool

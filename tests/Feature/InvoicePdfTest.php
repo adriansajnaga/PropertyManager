@@ -132,7 +132,9 @@ class InvoicePdfTest extends TestCase
             'qrCode' => $qr->dataUri($url),
         ])->render();
 
-        $this->assertStringContainsString('Faktura w Krajowym Systemie e-Faktur', $html);
+        // Strona weryfikacyjna wzorowana na wizualizacji z KSeF.
+        $this->assertStringContainsString('Sprawdź, czy Twoja faktura znajduje się w KSeF!', $html);
+        $this->assertStringContainsString('link weryfikacyjny', $html);
         $this->assertStringContainsString('8792451081-20260926-9132F5C00005-ED', $html);
         $this->assertStringContainsString('data:image/svg+xml;base64,', $html);
 

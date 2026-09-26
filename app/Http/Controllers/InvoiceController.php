@@ -37,8 +37,6 @@ class InvoiceController extends Controller
             'year' => $year,
             'years' => $this->years($year),
             'invoices' => $invoices,
-            'netTotal' => $invoices->sum(fn (Invoice $invoice) => (float) $invoice->total_net),
-            'grossTotal' => $invoices->sum(fn (Invoice $invoice) => (float) $invoice->total_gross),
             // Wystawiamy tylko za bieżący miesiąc — starsze naliczenia mają swoje
             // faktury w KSeF i stamtąd je pobieramy.
             'uncharged' => RentCharge::with('unit', 'tenant')
@@ -201,6 +199,8 @@ class InvoiceController extends Controller
             return back()->withErrors(['email' => 'Nie udało się wysłać: '.$e->getMessage()]);
         }
 
+        $invoice->forceFill(['emailed_at' => now(), 'emailed_to' => $data['email']])->save();
+
         return back()->with('status', "{$invoice->title()} wysłana na adres {$data['email']}.");
     }
 
@@ -210,11 +210,17 @@ class InvoiceController extends Controller
         $url = $invoice->goesToKsef() ? $qr->url($invoice) : null;
 
         // Jeden szablon obsługuje oba dokumenty — różnią się kolumną VAT i wystawcą.
+        $environment = \App\Models\KsefSetting::current()->environment;
+
         return Pdf::loadView('pdf.invoice', [
             'invoice' => $invoice,
             'settings' => InvoiceSetting::current(),
             'qrUrl' => $url,
-            'qrCode' => $url ? $qr->dataUri($url) : null,
+            'qrCode' => $url ? $qr->dataUri($url, 340) : null,
+            // KSeF znaczy wizualizacje ze środowisk nieprodukcyjnych.
+            'environmentNote' => $environment && ! $environment->isProduction()
+                ? 'Środowisko '.($environment === \App\Enums\KsefEnvironment::Demo ? 'Demo' : 'Testowe')
+                : null,
         ])->setPaper('a4');
     }
 

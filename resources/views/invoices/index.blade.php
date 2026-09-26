@@ -25,16 +25,6 @@
             </flux:select>
         </form>
 
-        <div class="flex flex-wrap gap-6 text-sm">
-            <div>
-                <flux:subheading>Netto w {{ $year }}</flux:subheading>
-                <flux:heading size="lg" class="tabular-nums">{{ \App\Support\Format::money($netTotal) }} zł</flux:heading>
-            </div>
-            <div>
-                <flux:subheading>Brutto</flux:subheading>
-                <flux:heading size="lg" class="tabular-nums">{{ \App\Support\Format::money($grossTotal) }} zł</flux:heading>
-            </div>
-        </div>
     </div>
 
     @if ($uncharged->isNotEmpty())
@@ -107,7 +97,15 @@
                         <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::money($invoice->total_net) }} zł</flux:table.cell>
                         <flux:table.cell align="end" class="tabular-nums">{{ \App\Support\Format::money($invoice->total_gross) }} zł</flux:table.cell>
                         <flux:table.cell>
-                            <flux:badge size="sm" :color="$invoice->status->color()">{{ $invoice->status->label() }}</flux:badge>
+                            <div class="flex flex-wrap gap-1">
+                                <flux:badge size="sm" :color="$invoice->status->color()">{{ $invoice->status->label() }}</flux:badge>
+                                @if ($invoice->wasEmailed())
+                                    <flux:badge size="sm" color="blue" icon="envelope"
+                                        :title="'Wysłana '.$invoice->emailed_at->format('d.m.Y, H:i').' na '.$invoice->emailed_to">
+                                        wysłana do najemcy
+                                    </flux:badge>
+                                @endif
+                            </div>
                         </flux:table.cell>
                         <flux:table.cell align="end">
                             <flux:button size="sm" variant="ghost" icon="eye" :href="route('invoices.show', $invoice)" tooltip="Podgląd" />

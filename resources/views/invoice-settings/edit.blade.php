@@ -6,7 +6,7 @@
 
 @section('content')
     <flux:card class="max-w-3xl">
-        <form method="POST" action="{{ route('invoice-settings.update') }}" class="space-y-6">
+        <form method="POST" action="{{ route('invoice-settings.update') }}" class="space-y-6" enctype="multipart/form-data">
             @csrf
 
             <div>
@@ -30,6 +30,10 @@
                 <flux:input name="issue_place" label="Miejsce wystawienia"
                     :value="old('issue_place', $settings->issue_place)" />
             </div>
+
+            <flux:input type="file" name="logo" label="Logo na fakturze" badge="opcjonalnie"
+                accept=".png,.jpg,.jpeg"
+                :description="$settings->logo_path ? 'Logo jest wgrane — wybór nowego pliku je zastąpi.' : 'PNG albo JPG, najlepiej z przezroczystym tłem, do 2 MB.'" />
 
             <flux:separator variant="subtle" />
 
