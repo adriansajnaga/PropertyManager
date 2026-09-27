@@ -8,7 +8,9 @@ use App\Models\Meter;
 use App\Models\Property;
 use App\Models\Tenant;
 use App\Models\Unit;
+use App\Models\UnitTenantAssignment;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class UnitController extends Controller
 {
@@ -120,6 +122,8 @@ class UnitController extends Controller
         $current = $unit->tenantAssignments()->whereNull('valid_to')->latest('valid_from')->first();
 
         if ($current?->tenant_id === $tenantId) {
+            $this->correctStartDate($unit, $current, $validFrom);
+
             return;
         }
 
@@ -131,6 +135,33 @@ class UnitController extends Controller
                 'valid_from' => $validFrom,
             ]);
         }
+    }
+
+    /**
+     * Ten sam najemca z inną datą to poprawka pomyłki, nie zmiana najemcy: umowa
+     * zaczęła się wcześniej, niż zapisano. Przesuwamy początek przypisania i domykamy
+     * nim poprzednie, żeby okresy się nie nakładały.
+     */
+    private function correctStartDate(Unit $unit, UnitTenantAssignment $assignment, string $validFrom): void
+    {
+        if ($assignment->valid_from->toDateString() === $validFrom) {
+            return;
+        }
+
+        $previous = $unit->tenantAssignments()
+            ->whereKeyNot($assignment->getKey())
+            ->orderByDesc('valid_from')
+            ->first();
+
+        // Cofnięcie daty przed poprzedni najem połknęłoby cały jego okres.
+        if ($previous !== null && ! $previous->valid_from->lt($validFrom)) {
+            throw ValidationException::withMessages([
+                'valid_from' => 'Ta data wchodzi w poprzedni najem lokalu — popraw najpierw jego okres.',
+            ]);
+        }
+
+        $previous?->update(['valid_to' => $validFrom]);
+        $assignment->update(['valid_from' => $validFrom]);
     }
 
     private function syncMeterAssignment(Unit $unit, ?int $meterId, MeterType $type, string $validFrom): void

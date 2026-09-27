@@ -69,7 +69,8 @@ class KsefInvoiceImporter
                     continue;
                 }
 
-                if (Invoice::where('ksef_number', $ksefNumber)->exists()) {
+                if ($known = Invoice::where('ksef_number', $ksefNumber)->first()) {
+                    $this->linkRentCharge($known);
                     $summary['known']++;
 
                     continue;
@@ -246,6 +247,27 @@ class KsefInvoiceImporter
 
             return $invoice;
         });
+    }
+
+    /**
+     * Faktura pobrana wcześniej mogła nie mieć do czego się przypiąć — naliczenie
+     * bywało wtedy bez najemcy. Przy kolejnym pobraniu próbujemy jeszcze raz.
+     */
+    private function linkRentCharge(Invoice $invoice): void
+    {
+        if ($invoice->rent_charge_id !== null || $invoice->tenant === null) {
+            return;
+        }
+
+        $charge = $this->matchingRentCharge($invoice->tenant, $invoice->sold_on);
+
+        if ($charge === null) {
+            return;
+        }
+
+        $invoice->update(['rent_charge_id' => $charge->id, 'unit_id' => $charge->unit_id]);
+
+        $charge->update(['invoice_number' => $invoice->number, 'due_on' => $invoice->due_on]);
     }
 
     /** Naliczenie czynszu za miesiąc sprzedaży, o ile nie ma jeszcze faktury. */

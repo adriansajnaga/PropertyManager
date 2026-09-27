@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\RentStatus;
 use App\Models\RentCharge;
+use App\Models\Tenant;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\RentAccrualService;
@@ -205,6 +206,68 @@ class RentChargeTest extends TestCase
         $this->unit()->update(['rent_amount' => 2500]);
 
         $this->assertSame(3, $accrual->run());
+    }
+
+    public function test_the_tenancy_start_date_can_be_corrected_without_changing_the_tenant(): void
+    {
+        $unit = $this->unit();
+        $tenant = $unit->currentTenant();
+        $assignment = $unit->tenantAssignments()->sole();
+
+        $this->put(route('units.update', $unit), [
+            'property_id' => $unit->property_id,
+            'description' => $unit->description,
+            'area' => $unit->area,
+            'rent_amount' => $unit->rent_amount,
+            'tenant_id' => $tenant->id,
+            'valid_from' => '2025-11-01',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        // Ten sam najemca, poprawiona data — nie powstaje drugie przypisanie.
+        $this->assertSame(1, $unit->tenantAssignments()->count());
+        $this->assertSame('2025-11-01', $assignment->refresh()->valid_from->toDateString());
+    }
+
+    public function test_a_charge_left_without_a_tenant_takes_one_once_the_tenancy_covers_it(): void
+    {
+        $unit = $this->unit();
+        $tenant = $unit->currentTenant();
+
+        // Tak wygląda naliczenie po skasowaniu i ponownym dodaniu najemcy.
+        $orphan = RentCharge::create([
+            'unit_id' => $unit->id,
+            'month' => '2025-12-01',
+            'amount' => 2214,
+        ]);
+
+        $this->assertNull($orphan->tenant_id);
+
+        // Dopóki przypisanie zaczyna się w styczniu, grudzień zostaje bez najemcy.
+        app(RentAccrualService::class)->run();
+        $this->assertNull($orphan->refresh()->tenant_id);
+
+        $unit->tenantAssignments()->sole()->update(['valid_from' => '2025-12-01']);
+
+        app(RentAccrualService::class)->run();
+
+        $this->assertSame($tenant->id, $orphan->refresh()->tenant_id);
+    }
+
+    public function test_an_existing_tenant_on_a_charge_is_never_replaced(): void
+    {
+        $unit = $this->unit();
+        $other = Tenant::create(['name' => 'Poprzedni najemca']);
+
+        $charge = RentCharge::create([
+            'unit_id' => $unit->id,
+            'tenant_id' => $other->id,
+            'month' => '2026-01-01',
+            'amount' => 2214,
+        ]);
+
+        app(RentAccrualService::class)->run();
+
+        $this->assertSame($other->id, $charge->refresh()->tenant_id);
     }
 
     public function test_the_rent_pages_render(): void

@@ -24,6 +24,8 @@ class RentAccrualService
         $floor = $through->subMonths(self::MAX_MONTHS_BACK);
         $created = 0;
 
+        $this->fillMissingTenants();
+
         $units = Unit::query()
             ->whereNotNull('rent_amount')
             ->where('rent_amount', '>', 0)
@@ -74,6 +76,26 @@ class RentAccrualService
         $this->rememberProgress($unit, $lastCharged);
 
         return $created;
+    }
+
+    /**
+     * Naliczenie bez najemcy powstaje, gdy przypisanie zaczynało się później niż
+     * czynsz albo gdy wpis najemcy skasowano i dodano na nowo. Kiedy przypisanie
+     * obejmuje już ten miesiąc, uzupełniamy je — istniejącego najemcy nigdy nie
+     * podmieniamy, bo to historia rozliczeń. Dotyczy to każdego lokalu, także
+     * takiego, który dziś nie ma stawki czynszu.
+     */
+    private function fillMissingTenants(): void
+    {
+        $orphans = RentCharge::query()->whereNull('tenant_id')->with('unit')->get();
+
+        foreach ($orphans as $charge) {
+            $tenant = $charge->unit?->tenantAt($charge->month->toDateString());
+
+            if ($tenant !== null) {
+                $charge->forceFill(['tenant_id' => $tenant->id])->save();
+            }
+        }
     }
 
     /**

@@ -246,6 +246,34 @@ class KsefInvoiceImportTest extends TestCase
         $this->assertSame($unit->id, Invoice::sole()->unit_id);
     }
 
+    public function test_a_second_import_attaches_an_invoice_to_a_charge_that_gained_a_tenant(): void
+    {
+        $unit = Unit::where('description', 'Lokal 12')->firstOrFail();
+
+        // Pierwsze pobranie: naliczenie jeszcze bez najemcy, więc nie ma do czego przypiąć.
+        $charge = RentCharge::create([
+            'unit_id' => $unit->id,
+            'month' => '2026-09-01',
+            'amount' => 2214,
+        ]);
+
+        $this->fakeKsef([$this->metadata('8792451081-20260901-9132F5C00005-ED')]);
+        $this->post(route('invoices.import'), ['from' => '2026-09-01', 'to' => '2026-09-30']);
+
+        $this->assertNull(Invoice::sole()->rent_charge_id);
+
+        // Naliczenie dostało najemcę — kolejne pobranie ma je dokleić do faktury.
+        $charge->forceFill(['tenant_id' => $this->tenant->id])->save();
+
+        $this->post(route('invoices.import'), ['from' => '2026-09-01', 'to' => '2026-09-30'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($charge->id, Invoice::sole()->rent_charge_id);
+        $this->assertSame('1/9/2026', $charge->refresh()->invoice_number);
+        $this->assertSame('2026-09-08', $charge->due_on->toDateString());
+    }
+
     public function test_the_tenant_card_lists_the_imported_invoices(): void
     {
         $this->fakeKsef([$this->metadata('8792451081-20260901-9132F5C00005-ED')]);
