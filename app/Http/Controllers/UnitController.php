@@ -96,6 +96,9 @@ class UnitController extends Controller
                 fn (MeterType $type) => [$type->value => Meter::active()->withoutModules()->ofType($type)->orderBy('name')->get()],
             ),
             'currentTenantId' => $unit->exists ? $unit->currentTenant()?->id : null,
+            // Formularz pokazuje datę, która naprawdę jest w bazie — inaczej po
+            // zapisie wyglądałoby to na cofnięcie zmiany.
+            'currentValidFrom' => $unit->exists ? $unit->currentTenancy()?->valid_from : null,
             'currentMeterIds' => collect(MeterType::cases())->mapWithKeys(
                 fn (MeterType $type) => [$type->value => $assignedMeters->firstWhere('type', $type)?->id],
             ),

@@ -74,6 +74,15 @@ class Unit extends Model
         return $this->tenantAt(now()->toDateString());
     }
 
+    /** Obowiązujące przypisanie najemcy — razem z datą, od której trwa. */
+    public function currentTenancy(): ?UnitTenantAssignment
+    {
+        return $this->tenantAssignments()
+            ->whereNull('valid_to')
+            ->latest('valid_from')
+            ->first();
+    }
+
     public function tenantAt(string $date): ?Tenant
     {
         $assignment = $this->tenantAssignments()

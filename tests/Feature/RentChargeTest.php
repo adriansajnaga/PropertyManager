@@ -226,6 +226,10 @@ class RentChargeTest extends TestCase
         // Ten sam najemca, poprawiona data — nie powstaje drugie przypisanie.
         $this->assertSame(1, $unit->tenantAssignments()->count());
         $this->assertSame('2025-11-01', $assignment->refresh()->valid_from->toDateString());
+
+        // Formularz i karta lokalu pokazują zapisaną datę, a nie bieżący miesiąc.
+        $this->get(route('units.edit', $unit))->assertOk()->assertSee('value="2025-11-01"', false);
+        $this->get(route('units.show', $unit))->assertOk()->assertSee('najem od 01.11.2025');
     }
 
     public function test_a_charge_left_without_a_tenant_takes_one_once_the_tenancy_covers_it(): void

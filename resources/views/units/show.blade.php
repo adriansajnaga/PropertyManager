@@ -48,6 +48,11 @@
                 <x-detail label="Najemca">
                     @if ($tenant)
                         <flux:link :href="route('tenants.show', $tenant)">{{ $tenant->name }}</flux:link>
+                        @if ($tenancy = $unit->currentTenancy())
+                            <span class="block text-xs text-zinc-500">
+                                najem od {{ $tenancy->valid_from->format('d.m.Y') }}
+                            </span>
+                        @endif
                     @else
                         <flux:badge size="sm" color="zinc">lokal wolny</flux:badge>
                     @endif

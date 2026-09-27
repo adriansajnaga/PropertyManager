@@ -76,11 +76,12 @@
 
 <div class="max-w-xs">
     <flux:input name="valid_from" type="date" label="Przypisania obowiązują od"
-        :value="old('valid_from', now()->startOfMonth()->toDateString())" />
+        :value="old('valid_from', $currentValidFrom?->toDateString() ?? now()->startOfMonth()->toDateString())" />
 </div>
 
 <flux:text>
     Zmiana najemcy lub licznika zamyka poprzednie przypisanie tą datą — rozliczenia z przeszłości pozostają nienaruszone.
+    Gdy najemca zostaje ten sam, sama data poprawia początek trwającego najmu.
 </flux:text>
 
 <x-form-actions :cancel="route('units.index')" />
