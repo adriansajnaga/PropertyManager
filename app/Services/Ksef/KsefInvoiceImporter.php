@@ -2,6 +2,7 @@
 
 namespace App\Services\Ksef;
 
+use App\Enums\DocumentType;
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\KsefSetting;
@@ -74,7 +75,7 @@ class KsefInvoiceImporter
                     continue;
                 }
 
-                $this->store($ksefNumber, $tenants[$buyerNip]);
+                $this->store($ksefNumber, $tenants[$buyerNip], $this->issuedHere($metadata));
                 $summary['imported']++;
             }
 
@@ -146,7 +147,26 @@ class KsefInvoiceImporter
         };
     }
 
-    private function store(string $ksefNumber, Tenant $tenant): Invoice
+    /**
+     * Faktura wystawiona w aplikacji, która czeka na potwierdzenie z KSeF —
+     * import ma ją uzupełnić, a nie dopisać obok drugiej o tym samym numerze.
+     */
+    private function issuedHere(array $metadata): ?Invoice
+    {
+        $number = trim((string) ($metadata['invoiceNumber'] ?? ''));
+
+        if ($number === '') {
+            return null;
+        }
+
+        return Invoice::query()
+            ->where('document_type', DocumentType::Invoice)
+            ->where('number', $number)
+            ->whereNull('ksef_number')
+            ->first();
+    }
+
+    private function store(string $ksefNumber, Tenant $tenant, ?Invoice $existing = null): Invoice
     {
         $xml = $this->client->downloadInvoice($ksefNumber);
         $document = new SimpleXMLElement($xml);
@@ -166,10 +186,10 @@ class KsefInvoiceImporter
         $vat = (float) ($value('//fa:Fa/fa:P_14_1') ?? 0);
         $gross = (float) ($value('//fa:Fa/fa:P_15') ?? $net + $vat);
 
-        return DB::transaction(function () use ($document, $value, $ksefNumber, $tenant, $issuedOn, $soldOn, $due, $net, $vat, $gross, $xml) {
-            $charge = $this->matchingRentCharge($tenant, $soldOn);
+        return DB::transaction(function () use ($document, $value, $ksefNumber, $tenant, $existing, $issuedOn, $soldOn, $due, $net, $vat, $gross, $xml) {
+            $charge = $existing?->rentCharge ?? $this->matchingRentCharge($tenant, $soldOn);
 
-            $invoice = Invoice::create([
+            $attributes = [
                 'number' => $value('//fa:Fa/fa:P_2') ?? $ksefNumber,
                 'tenant_id' => $tenant->id,
                 'unit_id' => $charge?->unit_id,
@@ -181,12 +201,21 @@ class KsefInvoiceImporter
                 'total_net' => $net,
                 'total_vat' => $vat,
                 'total_gross' => $gross,
-                'status' => InvoiceStatus::Imported,
+                // Dokument wystawiony u nas został wysłany; obcy — pobrany.
+                'status' => $existing ? InvoiceStatus::Sent : InvoiceStatus::Imported,
                 'ksef_number' => $ksefNumber,
                 'ksef_environment' => KsefSetting::current()->environment,
                 'ksef_sent_at' => $issuedOn,
                 'xml' => $xml,
-            ]);
+            ];
+
+            if ($existing === null) {
+                $invoice = Invoice::create($attributes);
+            } else {
+                $existing->update($attributes);
+                $existing->lines()->delete();
+                $invoice = $existing;
+            }
 
             foreach ($document->xpath('//fa:FaWiersz') ?: [] as $position => $row) {
                 $row->registerXPathNamespace('fa', self::FA3_NAMESPACE);

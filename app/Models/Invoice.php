@@ -3,14 +3,32 @@
 namespace App\Models;
 
 use App\Enums\DocumentType;
-use App\Enums\KsefEnvironment;
 use App\Enums\InvoiceStatus;
+use App\Enums\KsefEnvironment;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Invoice extends Model
 {
+    /**
+     * Aplikacja pokazuje tylko to, co widzi w KSeF, do którego jest podłączona.
+     * Dokumenty z innego środowiska zostają w bazie — są dowodem tego, co się
+     * naprawdę stało — ale nie mieszają się do bieżącej pracy. Rachunki imienne
+     * i dokumenty przed wysyłką nie mają środowiska, więc widać je zawsze.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('ksefEnvironment', function (Builder $query) {
+            $current = KsefSetting::current()->environment;
+
+            $query->where(fn (Builder $query) => $query
+                ->whereNull($query->qualifyColumn('ksef_environment'))
+                ->orWhere($query->qualifyColumn('ksef_environment'), $current));
+        });
+    }
+
     protected $fillable = [
         'number',
         'document_type',

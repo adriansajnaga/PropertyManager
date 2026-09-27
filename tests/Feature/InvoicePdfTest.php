@@ -161,7 +161,7 @@ class InvoicePdfTest extends TestCase
         $this->assertNull(app(InvoiceQrCode::class)->url($this->invoice()));
     }
 
-    public function test_switching_to_production_does_not_move_old_invoices(): void
+    public function test_an_invoice_from_the_test_register_is_marked_as_such(): void
     {
         $this->fakeKsefSending();
         $invoice = $this->invoice();
@@ -169,16 +169,33 @@ class InvoicePdfTest extends TestCase
 
         $this->assertSame(KsefEnvironment::Test, $invoice->refresh()->ksef_environment);
 
-        // Przełączenie ustawień zmienia adres kolejnych wysyłek, nie historii.
-        KsefSetting::current()->update(['environment' => KsefEnvironment::Prod]);
-
-        $this->assertSame(1, Invoice::count());
+        $this->get(route('invoices.index'))->assertOk()->assertSee('testowa');
         $this->assertStringStartsWith(
             'https://qr-test.ksef.mf.gov.pl/',
-            app(InvoiceQrCode::class)->url($invoice->refresh()),
+            app(InvoiceQrCode::class)->url($invoice),
         );
+    }
 
-        $this->get(route('invoices.index'))->assertOk()->assertSee('testowa');
+    public function test_after_switching_to_production_test_invoices_leave_the_list(): void
+    {
+        $this->fakeKsefSending();
+        $invoice = $this->invoice();
+        $this->post(route('invoices.send', $invoice));
+
+        KsefSetting::current()->update(['environment' => KsefEnvironment::Prod]);
+
+        // Dokument zostaje w bazie — jest dowodem tego, co się stało — ale aplikacja
+        // pokazuje wyłącznie rejestr, do którego jest teraz podłączona.
+        $this->assertSame(0, Invoice::count());
+        $this->assertSame(1, Invoice::withoutGlobalScopes()->count());
+
+        $this->get(route('invoices.index'))
+            ->assertOk()
+            ->assertSee('Brak dokumentów w 2026.')
+            ->assertDontSee('testowa');
+
+        // Naliczenie czynszu znów czeka na dokument — tym razem prawdziwy.
+        $this->assertNull($invoice->rentCharge->refresh()->invoice);
     }
 
     public function test_the_logo_lands_in_the_pdf_as_data(): void

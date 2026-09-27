@@ -123,6 +123,47 @@ class KsefInvoiceImportTest extends TestCase
         $this->assertStringContainsString('<P_2>1/9/2026</P_2>', $invoice->xml);
     }
 
+    public function test_an_invoice_issued_here_is_completed_instead_of_duplicated(): void
+    {
+        // Faktura wystawiona w aplikacji, której wysyłka nie zapisała numeru KSeF.
+        $charge = RentCharge::create([
+            'unit_id' => Unit::where('description', 'Lokal 12')->firstOrFail()->id,
+            'tenant_id' => $this->tenant->id,
+            'month' => '2026-09-01',
+            'amount' => 2214,
+        ]);
+
+        $waiting = Invoice::create([
+            'number' => '1/9/2026',
+            'tenant_id' => $this->tenant->id,
+            'unit_id' => $charge->unit_id,
+            'rent_charge_id' => $charge->id,
+            'issued_on' => '2026-09-01',
+            'sold_on' => '2026-09-01',
+            'due_on' => '2026-09-08',
+            'vat_rate' => 23,
+            'total_net' => 1800,
+            'total_vat' => 414,
+            'total_gross' => 2214,
+        ]);
+
+        $this->fakeKsef([$this->metadata('8792451081-20260901-9132F5C00005-ED')]);
+
+        $this->post(route('invoices.import'), ['from' => '2026-09-01', 'to' => '2026-09-30'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        // Jeden dokument, uzupełniony danymi z rejestru — nie dwa o tym samym numerze.
+        $invoice = Invoice::sole();
+
+        $this->assertSame($waiting->id, $invoice->id);
+        $this->assertSame('8792451081-20260901-9132F5C00005-ED', $invoice->ksef_number);
+        $this->assertSame(KsefEnvironment::Test, $invoice->ksef_environment);
+        $this->assertSame(InvoiceStatus::Sent, $invoice->status);
+        $this->assertSame($charge->id, $invoice->rent_charge_id);
+        $this->assertCount(1, $invoice->lines);
+    }
+
     public function test_it_asks_ksef_only_about_invoices_where_we_are_the_seller(): void
     {
         $this->fakeKsef([]);
