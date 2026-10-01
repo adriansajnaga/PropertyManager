@@ -155,12 +155,20 @@ class InvoiceController extends Controller
             return back()->withErrors(['invoice' => 'Import z KSeF nie powiódł się: '.$e->getMessage()]);
         }
 
-        return back()->with('status', sprintf(
+        $status = sprintf(
             'Pobrano z KSeF: %d nowych faktur, %d było już w aplikacji, %d pominięto (nabywca nie jest najemcą).',
             $summary['imported'],
             $summary['known'],
             $summary['foreign'],
-        ));
+        );
+
+        // Dokument, którego nie dało się odczytać, zgłaszamy po numerze KSeF —
+        // zamiast zapisywać go jako pustą fakturę.
+        if ($summary['unreadable'] !== []) {
+            $status .= ' Nie udało się odczytać dokumentów: '.implode(', ', $summary['unreadable']).'.';
+        }
+
+        return back()->with('status', $status);
     }
 
     /** Wizualizacja faktury w PDF, z kodem QR weryfikującym ją w KSeF. */

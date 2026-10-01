@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use SimpleXMLElement;
+use Throwable;
 
 /**
  * Pobiera z KSeF faktury wystawione najemcom. Dokumenty sprzed wdrożenia aplikacji
@@ -20,7 +21,7 @@ use SimpleXMLElement;
  */
 class KsefInvoiceImporter
 {
-    /** Schemat FA(3) — wszystkie pola faktury żyją w tej przestrzeni nazw. */
+    /** Schemat FA(3) — wzór bieżący; starsze faktury w KSeF mają własne. */
     private const FA3_NAMESPACE = 'http://crd.gov.pl/wzor/2025/06/25/13775/';
 
     /** KSeF przyjmuje zapytania o zakres nie dłuższy niż 100 dni. */
@@ -29,12 +30,12 @@ class KsefInvoiceImporter
     public function __construct(private readonly KsefClient $client) {}
 
     /**
-     * @return array{imported: int, known: int, foreign: int}
+     * @return array{imported: int, known: int, foreign: int, unreadable: array<int, string>}
      */
     public function import(CarbonInterface $from, CarbonInterface $to): array
     {
         $tenants = $this->tenantsByNip();
-        $summary = ['imported' => 0, 'known' => 0, 'foreign' => 0];
+        $summary = ['imported' => 0, 'known' => 0, 'foreign' => 0, 'unreadable' => []];
 
         foreach ($this->windows($from, $to) as [$windowFrom, $windowTo]) {
             $this->importWindow($windowFrom, $windowTo, $tenants, $summary);
@@ -76,7 +77,14 @@ class KsefInvoiceImporter
                     continue;
                 }
 
-                $this->store($ksefNumber, $tenants[$buyerNip], $this->issuedHere($metadata));
+                $invoice = $this->readDocument($ksefNumber, $tenants[$buyerNip], $this->issuedHere($metadata));
+
+                if ($invoice === null) {
+                    $summary['unreadable'][] = $ksefNumber;
+
+                    continue;
+                }
+
                 $summary['imported']++;
             }
 
@@ -135,12 +143,30 @@ class KsefInvoiceImporter
         return $invoice->refresh();
     }
 
-    /** Odczyt pól FA(3) po ścieżce XPath. */
+    /** Odczyt pól faktury po ścieżce XPath. */
     private function reader(string $xml): callable
     {
-        $document = new SimpleXMLElement($xml);
-        $document->registerXPathNamespace('fa', self::FA3_NAMESPACE);
+        return $this->readerFor($this->parse($xml));
+    }
 
+    /**
+     * Faktury sprzed FA(3) mają własną przestrzeń nazw — FA(1) i FA(2) różnią się
+     * od bieżącego wzoru adresem, a nie nazwami pól. Bierzemy ją więc z samego
+     * dokumentu; wpisana na sztywno sprawiała, że z takiej faktury nie dawało się
+     * odczytać niczego i do bazy trafiał pusty wpis.
+     */
+    private function parse(string $xml): SimpleXMLElement
+    {
+        $document = new SimpleXMLElement($xml);
+        $namespaces = $document->getDocNamespaces();
+
+        $document->registerXPathNamespace('fa', $namespaces[''] ?? self::FA3_NAMESPACE);
+
+        return $document;
+    }
+
+    private function readerFor(SimpleXMLElement $document): callable
+    {
         return function (string $path) use ($document): ?string {
             $found = $document->xpath($path);
 
@@ -167,17 +193,33 @@ class KsefInvoiceImporter
             ->first();
     }
 
-    private function store(string $ksefNumber, Tenant $tenant, ?Invoice $existing = null): Invoice
+    /**
+     * Uszkodzony albo nieznany dokument nie może przerwać całego pobierania ani
+     * trafić do bazy jako pusty wpis — zgłaszamy go po numerze KSeF.
+     */
+    private function readDocument(string $ksefNumber, Tenant $tenant, ?Invoice $existing): ?Invoice
+    {
+        try {
+            return $this->store($ksefNumber, $tenant, $existing);
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** Zwraca null, gdy dokumentu nie da się odczytać — wtedy nic nie zapisujemy. */
+    private function store(string $ksefNumber, Tenant $tenant, ?Invoice $existing = null): ?Invoice
     {
         $xml = $this->client->downloadInvoice($ksefNumber);
-        $document = new SimpleXMLElement($xml);
-        $document->registerXPathNamespace('fa', self::FA3_NAMESPACE);
+        $document = $this->parse($xml);
+        $value = $this->readerFor($document);
 
-        $value = function (string $path) use ($document): ?string {
-            $found = $document->xpath($path);
-
-            return $found ? trim((string) $found[0]) : null;
-        };
+        // Numer faktury jest w każdym wzorze. Jego brak znaczy, że to nie jest
+        // faktura, którą rozumiemy — lepiej zgłosić dokument, niż zapisać pustkę.
+        if ($value('//fa:Fa/fa:P_2') === null) {
+            return null;
+        }
 
         $issuedOn = CarbonImmutable::parse($value('//fa:Fa/fa:P_1') ?? now()->toDateString());
         $soldOn = CarbonImmutable::parse($value('//fa:Fa/fa:P_6') ?? $issuedOn->toDateString());
@@ -191,7 +233,7 @@ class KsefInvoiceImporter
             $charge = $existing?->rentCharge ?? $this->matchingRentCharge($tenant, $soldOn);
 
             $attributes = [
-                'number' => $value('//fa:Fa/fa:P_2') ?? $ksefNumber,
+                'number' => $value('//fa:Fa/fa:P_2'),
                 'tenant_id' => $tenant->id,
                 'unit_id' => $charge?->unit_id,
                 'rent_charge_id' => $charge?->id,
@@ -219,7 +261,7 @@ class KsefInvoiceImporter
             }
 
             foreach ($document->xpath('//fa:FaWiersz') ?: [] as $position => $row) {
-                $row->registerXPathNamespace('fa', self::FA3_NAMESPACE);
+                $row->registerXPathNamespace('fa', $document->getDocNamespaces()[''] ?? self::FA3_NAMESPACE);
                 $line = fn (string $tag) => trim((string) ($row->xpath('fa:'.$tag)[0] ?? ''));
 
                 $lineNet = (float) ($line('P_11') ?: 0);

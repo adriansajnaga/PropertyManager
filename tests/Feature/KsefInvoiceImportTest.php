@@ -164,6 +164,59 @@ class KsefInvoiceImportTest extends TestCase
         $this->assertCount(1, $invoice->lines);
     }
 
+    public function test_an_invoice_in_the_older_schema_is_read_too(): void
+    {
+        // Faktura ze stycznia 2026 powstała jeszcze we wzorze FA(2) — pola te same,
+        // inna przestrzeń nazw.
+        $fa2 = str_replace(
+            'http://crd.gov.pl/wzor/2025/06/25/13775/',
+            'http://crd.gov.pl/wzor/2023/06/29/12648/',
+            $this->invoiceXml('1/1/2026'),
+        );
+
+        $this->fakeKsef([$this->metadata('8792451081-20260112-8080C2B19C8C-41')], [
+            '*/invoices/ksef/*' => Http::response($fa2, 200, ['Content-Type' => 'application/xml']),
+        ]);
+
+        $this->post(route('invoices.import'), ['from' => '2026-01-01', 'to' => '2026-01-31'])
+            ->assertRedirect()
+            ->assertSessionHas('status', fn ($status) => str_contains($status, '1 nowych faktur'));
+
+        $invoice = Invoice::sole();
+
+        $this->assertSame('1/1/2026', $invoice->number);
+        $this->assertSame('1800.00', $invoice->total_net);
+        $this->assertSame('2214.00', $invoice->total_gross);
+        $this->assertSame('Czynsz wrzesień 2026', $invoice->lines->sole()->name);
+    }
+
+    public function test_a_document_that_cannot_be_read_is_reported_instead_of_saved(): void
+    {
+        $this->fakeKsef([$this->metadata('8792451081-20260112-8080C2B19C8C-41')], [
+            '*/invoices/ksef/*' => Http::response('<Dokument><Cos/></Dokument>', 200, ['Content-Type' => 'application/xml']),
+        ]);
+
+        $this->post(route('invoices.import'), ['from' => '2026-01-01', 'to' => '2026-01-31'])
+            ->assertRedirect()
+            ->assertSessionHas('status', fn ($status) => str_contains($status, '8792451081-20260112-8080C2B19C8C-41'));
+
+        // Pusta faktura z numerem KSeF zamiast numeru własnego nie trafia do bazy.
+        $this->assertSame(0, Invoice::count());
+    }
+
+    public function test_a_broken_document_does_not_stop_the_whole_import(): void
+    {
+        $this->fakeKsef([$this->metadata('8792451081-20260112-8080C2B19C8C-41')], [
+            '*/invoices/ksef/*' => Http::response('to nie jest XML', 200),
+        ]);
+
+        $this->post(route('invoices.import'), ['from' => '2026-01-01', 'to' => '2026-01-31'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(0, Invoice::count());
+    }
+
     public function test_it_asks_ksef_only_about_invoices_where_we_are_the_seller(): void
     {
         $this->fakeKsef([]);
