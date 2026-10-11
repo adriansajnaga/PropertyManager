@@ -17,6 +17,16 @@ enum MeterType: string
         };
     }
 
+    /** Barwa medium — ta sama na pulpicie, listach i znacznikach odczytów. */
+    public function color(): string
+    {
+        return match ($this) {
+            self::Electric => 'amber',
+            self::Heat => 'rose',
+            self::Water => 'sky',
+        };
+    }
+
     public function unit(): string
     {
         return match ($this) {

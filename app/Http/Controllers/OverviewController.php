@@ -34,8 +34,32 @@ class OverviewController extends Controller
             'overdueRent' => RentCharge::overdue()->sum('amount'),
             'overdueRentCount' => RentCharge::overdue()->count(),
             'staleStates' => $sync->staleStates(),
+            // Czynsz bieżącego miesiąca — ile naliczono i ile z tego wpłynęło.
+            'rentThisMonth' => $this->rentThisMonth(),
             'latestReadings' => Reading::with('meter')->latest('reading_date')->limit(10)->get(),
             'recentSettlements' => TenantSettlement::with('unit.property', 'tenant')->latest('month')->limit(10)->get(),
         ]);
+    }
+
+    /**
+     * @return array{charged: float, paid: float, count: int, paidCount: int, percent: int}
+     */
+    private function rentThisMonth(): array
+    {
+        $charges = RentCharge::whereBetween('month', [
+            now()->startOfMonth()->toDateString(),
+            now()->endOfMonth()->toDateString(),
+        ])->get();
+
+        $charged = (float) $charges->sum('amount');
+        $paid = (float) $charges->whereNotNull('paid_on')->sum('amount');
+
+        return [
+            'charged' => $charged,
+            'paid' => $paid,
+            'count' => $charges->count(),
+            'paidCount' => $charges->whereNotNull('paid_on')->count(),
+            'percent' => $charged > 0 ? (int) round($paid / $charged * 100) : 0,
+        ];
     }
 }
