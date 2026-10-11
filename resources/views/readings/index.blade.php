@@ -71,4 +71,26 @@
             </flux:table.rows>
         </flux:table>
     </flux:card>
+
+    @if (auth()->user()?->isAdmin())
+        <flux:card>
+            <flux:heading size="lg">Kontrola odczytów</flux:heading>
+            <flux:subheading>
+                Otwarcie tego adresu sprawdza, czy wszystkie czynne liczniki przysłały dziś odczyt.
+                Gdy komplet się zgadza, nic się nie dzieje; gdy czegoś brakuje, na adresy
+                administratorów idzie e-mail z listą milczących liczników. Ta sama lista braków
+                nie przychodzi dwa razy tego samego dnia.
+            </flux:subheading>
+
+            <flux:input class="mt-4 font-mono text-xs" readonly :value="$monitorUrl"
+                label="Adres do wywołania z crona" />
+
+            <flux:text class="mt-3">
+                W cPanelu dodaj zadanie cron z poleceniem
+                <code class="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-white/10">curl -s "ADRES" &gt; /dev/null</code>
+                — na przykład raz dziennie wieczorem, po godzinie ostatniego odczytu.
+                Podpis w adresie jest wyliczony z klucza aplikacji: zmiana APP_KEY unieważni link.
+            </flux:text>
+        </flux:card>
+    @endif
 @endsection

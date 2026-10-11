@@ -10,6 +10,7 @@ use App\Http\Controllers\MeterController;
 use App\Http\Controllers\OverviewController;
 use App\Http\Controllers\PropertyController;
 use App\Http\Controllers\ReadingController;
+use App\Http\Controllers\ReadingWatchdogController;
 use App\Http\Controllers\RentChargeController;
 use App\Http\Controllers\TenantController;
 use App\Http\Controllers\TenantPaymentController;
@@ -19,6 +20,15 @@ use App\Http\Controllers\UnitDocumentController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UtilityBillController;
 use Illuminate\Support\Facades\Route;
+
+/*
+ * Kontrola dziennych odczytów dla crona. Adres jest podpisany kluczem aplikacji,
+ * więc działa bez logowania, a bez poprawnego podpisu zwraca 403. Pełny link
+ * do skopiowania pokazuje karta na liście odczytów.
+ */
+Route::get('monitoring/odczyty', ReadingWatchdogController::class)
+    ->middleware('signed')
+    ->name('monitoring.readings');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('overview', OverviewController::class)->name('overview');

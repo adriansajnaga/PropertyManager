@@ -10,6 +10,7 @@ use App\Services\ModuleReadingConverter;
 use App\Services\ReadingLookup;
 use App\Services\ReadingSyncService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 
 class ReadingController extends Controller
 {
@@ -40,6 +41,8 @@ class ReadingController extends Controller
             'orphanedOnly' => $request->boolean('orphaned'),
             'orphanedCount' => Reading::orphaned()->count(),
             'linkedNow' => $linked,
+            // Adres kontroli odczytów dla crona — podpisany, więc działa bez logowania.
+            'monitorUrl' => URL::signedRoute('monitoring.readings'),
         ]);
     }
 
